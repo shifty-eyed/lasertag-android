@@ -1,6 +1,7 @@
 package net.lasertag;
 
 import android.os.Bundle;
+import android.os.Handler;
 import android.widget.TableLayout;
 import android.widget.TableRow;
 import android.widget.TextView;
@@ -15,8 +16,16 @@ import android.view.WindowManager;
 
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.net.InetAddress;
 
 public class MainActivity extends AppCompatActivity {
+
+    public static final String SERVER_IP = "192.168.4.95";
+    public static final int SERVER_PORT = 9877;
+    public static final int PLAYER_ID = 1;
+    public static final long HEARTBEAT_INTERVAL = 1000;
+
+    private Handler heartbeatHandler = new Handler();
 
     private TextView playerName;
     private TextView playerHealth;
@@ -44,36 +53,36 @@ public class MainActivity extends AppCompatActivity {
         playerScore = findViewById(R.id.player_score);
         playersTable = findViewById(R.id.players_table);
 
+        heartbeatHandler.postDelayed(this::heartbeat, HEARTBEAT_INTERVAL);
         startUDPListener();
     }
 
+    private void heartbeat() {
+        try {
+            DatagramSocket socket = new DatagramSocket();
+            byte[] message = new byte[] { 0, (byte) PLAYER_ID, 0 };
+            DatagramPacket packet = new DatagramPacket(message, message.length, InetAddress.getByName(SERVER_IP), SERVER_PORT);
+            socket.send(packet);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        heartbeatHandler.postDelayed(this::heartbeat, HEARTBEAT_INTERVAL);
+    }
+
     private void startUDPListener() {
-        Thread udpThread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    DatagramSocket socket = new DatagramSocket(9876); // Use appropriate port
-                    byte[] buffer = new byte[1024];
-
-                    while (true) {
-                        DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-                        socket.receive(packet);
-                        final String message = new String(packet.getData(), 0, packet.getLength());
-
-                        // Update UI on the main thread
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                handleIncomingMessage(message);
-                            }
-                        });
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
+        new Thread(() -> {
+            try (var socket = new DatagramSocket(9876)) {
+                var buffer = new byte[1024];
+                while (true) {
+                    var packet = new DatagramPacket(buffer, buffer.length);
+                    socket.receive(packet);
+                    var message = new String(packet.getData(), 0, packet.getLength());
+                    runOnUiThread(() -> handleIncomingMessage(message));
                 }
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-        });
-        udpThread.start();
+        }).start();
     }
 
     private void handleIncomingMessage(String message) {
