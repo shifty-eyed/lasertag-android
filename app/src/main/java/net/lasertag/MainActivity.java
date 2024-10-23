@@ -14,9 +14,18 @@ import androidx.core.view.WindowInsetsCompat;
 import android.view.Window;
 import android.view.WindowManager;
 
+import net.lasertag.model.EventMessage;
+import net.lasertag.model.Player;
+import net.lasertag.model.StatsMessage;
+import net.lasertag.model.UdpMessage;
+import net.lasertag.model.UdpMessages;
+
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.util.Arrays;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -25,11 +34,13 @@ public class MainActivity extends AppCompatActivity {
     public static final int PLAYER_ID = 1;
     public static final long HEARTBEAT_INTERVAL = 1000;
 
-    private Handler heartbeatHandler = new Handler();
+    private final Handler heartbeatHandler = new Handler();
+    private final ExecutorService executorService = Executors.newSingleThreadExecutor();
 
     private TextView playerName;
     private TextView playerHealth;
     private TextView playerScore;
+    private TextView bulletsLeft;
     private TableLayout playersTable;
 
     @Override
@@ -51,6 +62,7 @@ public class MainActivity extends AppCompatActivity {
         playerName = findViewById(R.id.player_name);
         playerHealth = findViewById(R.id.player_health);
         playerScore = findViewById(R.id.player_score);
+        bulletsLeft = findViewById(R.id.bullets);
         playersTable = findViewById(R.id.players_table);
 
         heartbeatHandler.postDelayed(this::heartbeat, HEARTBEAT_INTERVAL);
@@ -58,8 +70,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void heartbeat() {
-        try {
-            DatagramSocket socket = new DatagramSocket();
+        try (var socket = new DatagramSocket()){
             byte[] message = new byte[] { 0, (byte) PLAYER_ID, 0 };
             DatagramPacket packet = new DatagramPacket(message, message.length, InetAddress.getByName(SERVER_IP), SERVER_PORT);
             socket.send(packet);
@@ -70,74 +81,70 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startUDPListener() {
-        new Thread(() -> {
+        executorService.execute(() -> {
             try (var socket = new DatagramSocket(9876)) {
                 var buffer = new byte[1024];
                 while (true) {
                     var packet = new DatagramPacket(buffer, buffer.length);
                     socket.receive(packet);
-                    var message = new String(packet.getData(), 0, packet.getLength());
+                    var message = UdpMessages.fromBytes(packet.getData(), packet.getLength());
                     runOnUiThread(() -> handleIncomingMessage(message));
                 }
             } catch (Exception e) {
                 e.printStackTrace();
             }
-        }).start();
+        });
     }
 
-    private void handleIncomingMessage(String message) {
-        // Assume message format is JSON or custom delimited string
-        // Example: "PLAYER|John|100|1500;OTHERS|Jane,1400,90;Bob,1300,85;Alice,1250,95"
-        String[] sections = message.split(";");
-        for (String section : sections) {
-            if (section.startsWith("PLAYER|")) {
-                updatePlayerInfo(section);
-            } else if (section.startsWith("OTHERS|")) {
-                updateOtherPlayers(section);
-            }
+    private void handleIncomingMessage(UdpMessage message) {
+        if (message.getType() == UdpMessages.FULL_STATS) {
+            updatePlayersInfo((StatsMessage) message);
+        } else {
+            handleEvent((EventMessage) message);
         }
     }
 
-    private void updatePlayerInfo(String data) {
-        // Format: "PLAYER|Name|Health|Score"
-        String[] parts = data.split("\\|");
-        if (parts.length == 4) {
-            playerName.setText("Name: " + parts[1]);
-            playerHealth.setText("Health: " + parts[2]);
-            playerScore.setText("Score: " + parts[3]);
-        }
-    }
-
-    private void updateOtherPlayers(String data) {
-        // Clear existing rows except the header
+    private void updatePlayersInfo(StatsMessage message) {
         playersTable.removeViews(1, Math.max(0, playersTable.getChildCount() - 1));
+        for (Player player : message.getPlayers()) {
+            if (player.getId() == PLAYER_ID) {
+                playerName.setText(player.getName());
+                playerHealth.setText(player.getHealth());
+                playerScore.setText(player.getScore());
+            }
+            TableRow row = new TableRow(this);
 
-        // Format: "OTHERS|Name,Score,Health;Name,Score,Health;..."
-        String[] playersData = data.substring("OTHERS|".length()).split(";");
-        for (String playerInfo : playersData) {
-            String[] playerParts = playerInfo.split(",");
-            if (playerParts.length == 3) {
-                TableRow row = new TableRow(this);
+            TextView nameText = new TextView(this);
+            nameText.setText(player.getName());
+            nameText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
 
-                TextView nameText = new TextView(this);
-                nameText.setText(playerParts[0]);
-                nameText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
+            TextView scoreText = new TextView(this);
+            scoreText.setText(player.getScore());
+            scoreText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
 
-                TextView scoreText = new TextView(this);
-                scoreText.setText(playerParts[1]);
-                scoreText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
+            TextView healthText = new TextView(this);
+            healthText.setText(player.getHealth());
+            healthText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
 
-                TextView healthText = new TextView(this);
-                healthText.setText(playerParts[2]);
-                healthText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
+            row.addView(nameText);
+            row.addView(scoreText);
+            row.addView(healthText);
 
-                row.addView(nameText);
-                row.addView(scoreText);
-                row.addView(healthText);
+            playersTable.addView(row);
+        }
+    }
 
-                playersTable.addView(row);
+    private void handleEvent(EventMessage message) {
+        playerHealth.setText(message.getHealth());
+        playerScore.setText(message.getScore());
+        bulletsLeft.setText(message.getBulletsLeft());
+        switch (message.getType()) {
+            case UdpMessages.GUN_SHOT -> {
+                // play gunshot sound
+
             }
         }
     }
+
 
 }
