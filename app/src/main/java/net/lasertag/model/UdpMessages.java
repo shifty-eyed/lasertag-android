@@ -23,7 +23,9 @@ public class UdpMessages {
         ByteBuffer buffer = ByteBuffer.wrap(bytes, 0, length);
         buffer.order(java.nio.ByteOrder.LITTLE_ENDIAN);
         byte type = buffer.get();
-        if (type == FULL_STATS) {
+        if (type == PING) {
+            return new AckMessage(PING);
+        } else if (type == FULL_STATS) {
             return parseFullStatsMessage(buffer);
         } else {
             return parseEventMessage(type, buffer);

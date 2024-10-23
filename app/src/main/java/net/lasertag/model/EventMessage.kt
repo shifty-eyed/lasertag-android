@@ -4,6 +4,10 @@ abstract class UdpMessage(
     open val type: Byte
 )
 
+data class AckMessage (
+    override val type: Byte
+): UdpMessage(type)
+
 data class EventMessage (
     override val type: Byte,
     val counterpartPlayerId: Byte,
