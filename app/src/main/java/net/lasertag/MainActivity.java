@@ -1,5 +1,9 @@
 package net.lasertag;
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.res.Configuration;
 import android.os.Bundle;
 import android.util.Log;
@@ -35,10 +39,14 @@ public class MainActivity extends AppCompatActivity {
     public static final String SERVER_IP = "192.168.4.95";
     public static final int SERVER_PORT = 9878;
     public static final int PLAYER_ID = 1;
-    public static final long HEARTBEAT_INTERVAL = 2000;
 
-    private DatagramSocket heartbeatSocket;
-    private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(3);
+    private final BroadcastReceiver udpMessageReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            UdpMessage message = (UdpMessage) intent.getSerializableExtra("message");
+            handleIncomingMessage(message);
+        }
+    };
 
     private TextView playerName;
     private TextView playerHealth;
@@ -73,62 +81,17 @@ public class MainActivity extends AppCompatActivity {
 
         soundManager = new SoundManager(this);
 
-        try {
-            heartbeatSocket = new DatagramSocket();
-            executorService.scheduleWithFixedDelay(this::heartbeat, 0, HEARTBEAT_INTERVAL, java.util.concurrent.TimeUnit.MILLISECONDS);
-        } catch (SocketException e) {
-            throw new RuntimeException(e);
-        }
-        startUDPListener();
-    }
-
-    private void heartbeat() {
-        try {
-
-            byte[] message = new byte[] { UdpMessages.PING, (byte) PLAYER_ID, 0 };
-            DatagramPacket packet = new DatagramPacket(message, 3, InetAddress.getByName(SERVER_IP), SERVER_PORT);
-            heartbeatSocket.send(packet);
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to send heartbeat", e);
-        }
-    }
-
-    private void startUDPListener() {
-        executorService.execute(() -> {
-            try (var socket = new DatagramSocket(1234)) {
-                socket.setSoTimeout(1000);
-                var buffer = new byte[512];
-                Log.i(TAG, "Listening socket: "+socket.getLocalSocketAddress());
-                while (true) {
-                    Thread.yield();
-                    var packet = new DatagramPacket(buffer, buffer.length);
-                    try {
-                        socket.receive(packet);
-                    } catch (SocketTimeoutException e) {
-                        continue;
-                    }
-
-                    var message = UdpMessages.fromBytes(packet.getData(), packet.getLength());
-                    if (message instanceof AckMessage) {
-                        //TODO: update last ping time
-                    } else {
-                        var truncatedData = Arrays.copyOf(packet.getData(), packet.getLength());
-                        Log.i(TAG, "Got packet: "+ Arrays.toString(truncatedData));
-                        handleIncomingMessage(message);
-                    }
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "Failed to receive UDP message", e);
-            }
-        });
+        Intent serviceIntent = new Intent(this, NetworkService.class);
+        startService(serviceIntent);
+        registerReceiver(udpMessageReceiver, new IntentFilter("UDP_MESSAGE_RECEIVED"));
     }
 
     private void handleIncomingMessage(UdpMessage message) {
-        if (message.getType() == UdpMessages.FULL_STATS) {
+        if (message instanceof StatsMessage) {
             runOnUiThread(() -> updatePlayersInfo((StatsMessage) message));
-        } else {
+        } else if (message instanceof EventMessage) {
             handleEvent((EventMessage) message);
-        }
+        } //AckMessage ignored
     }
 
     private void updatePlayersInfo(StatsMessage message) {
@@ -184,6 +147,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         Log.i(TAG, "onDestroy called");
         super.onDestroy();
+        unregisterReceiver(udpMessageReceiver);
         soundManager.release();
     }
 

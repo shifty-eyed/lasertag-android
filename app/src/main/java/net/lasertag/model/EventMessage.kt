@@ -1,8 +1,10 @@
 package net.lasertag.model
 
+import java.io.Serializable
+
 abstract class UdpMessage(
     open val type: Byte
-)
+): Serializable
 
 data class AckMessage (
     override val type: Byte

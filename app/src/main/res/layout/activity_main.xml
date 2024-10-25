@@ -24,7 +24,7 @@
             android:id="@+id/player_name"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Name: "
+            android:text="Roma"
             android:textColor="@color/grey"
             android:textSize="24sp"
             android:textStyle="bold"
@@ -47,12 +47,12 @@
 
         <TextView
             android:id="@+id/player_health"
-            android:layout_width="140dp"
+            android:layout_width="100dp"
             android:layout_height="64dp"
             android:layout_marginStart="32dp"
             android:layout_marginLeft="16dp"
             android:layout_marginTop="24dp"
-            android:text="100%"
+            android:text="100"
             android:textColor="@color/grey"
             android:textSize="46sp"
             app:layout_constraintStart_toEndOf="@+id/imageView"
@@ -71,7 +71,7 @@
 
         <TextView
             android:id="@+id/player_score"
-            android:layout_width="140dp"
+            android:layout_width="100dp"
             android:layout_height="64dp"
             android:layout_marginStart="32dp"
             android:layout_marginLeft="16dp"
@@ -106,12 +106,14 @@
             app:layout_constraintStart_toEndOf="@+id/imageView3"
             app:layout_constraintTop_toBottomOf="@+id/player_score" />
 
-
     </androidx.constraintlayout.widget.ConstraintLayout>
-
+    <View
+        android:layout_width="1dp"
+        android:layout_height="match_parent"
+        android:background="@color/grey" />
     <LinearLayout
         android:id="@+id/other_players_layout"
-        android:layout_width="180dp"
+        android:layout_width="0dp"
         android:layout_height="match_parent"
         android:layout_weight="1"
         android:orientation="vertical"
