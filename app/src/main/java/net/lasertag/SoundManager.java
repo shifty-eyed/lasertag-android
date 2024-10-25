@@ -13,6 +13,8 @@ public class SoundManager {
     private int youHitSomeoneSound;
     private int noBulletsSound;
     private int reloadSound;
+    private int youKilledSound;
+    private int respawnSound;
 
     public SoundManager(Context context) {
         AudioAttributes audioAttributes = new AudioAttributes.Builder()
@@ -29,29 +31,53 @@ public class SoundManager {
         youHitSomeoneSound = soundPool.load(context, R.raw.hit, 1);
         noBulletsSound = soundPool.load(context, R.raw.noammo, 1);
         reloadSound = soundPool.load(context, R.raw.reload, 1);
-    }
+        youKilledSound = soundPool.load(context, R.raw.death, 1);
+        respawnSound = soundPool.load(context, R.raw.respawn, 1);
 
-    public void playGunShot() {
-        soundPool.play(gunShotSound, 1, 1, 0, 0, 1);
-    }
-
-    public void playGotHit() {
-        soundPool.play(gotHitSound, 1, 1, 0, 0, 1);
-    }
-
-    public void playYouHitSomeone() {
-        soundPool.play(youHitSomeoneSound, 1, 1, 0, 0, 1);
-    }
-
-    public void playNoBullets() {
-        soundPool.play(noBulletsSound, 1, 1, 0, 0, 1);
-    }
-
-    public void playReload() {
-        soundPool.play(reloadSound, 1, 1, 0, 0, 1);
     }
 
     public void release() {
         soundPool.release();
+    }
+
+    private void play(int soundId) {
+        soundPool.play(soundId, 1, 1, 0, 0, 1);
+    }
+
+    public void playGunShot() {
+        play(gunShotSound);
+    }
+
+    public void playGotHit() {
+        play(gotHitSound);
+    }
+
+    public void playYouHitSomeone() {
+        play(youHitSomeoneSound);
+    }
+
+    public void playNoBullets() {
+        play(noBulletsSound);
+    }
+
+    public void playReload() {
+        play(reloadSound);
+    }
+
+    public void playYouKilled() {
+        play(youKilledSound);
+    }
+
+    public void playRespawn() {
+        play(respawnSound);
+    }
+
+    public void playGameOver() {
+    }
+
+    public void playGameStart() {
+    }
+
+    public void playYouScored() {
     }
 }

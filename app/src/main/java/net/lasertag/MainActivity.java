@@ -30,7 +30,7 @@ import java.util.concurrent.ScheduledExecutorService;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static final String TAG = "LasertagMain";
+    private static final String TAG = "Lasertag";
     public static final String SERVER_IP = "192.168.4.95";
     public static final int SERVER_PORT = 9878;
     public static final int PLAYER_ID = 1;
@@ -106,7 +106,7 @@ public class MainActivity extends AppCompatActivity {
                     } else {
                         var truncatedData = Arrays.copyOf(packet.getData(), packet.getLength());
                         Log.i(TAG, "Got packet: "+ Arrays.toString(truncatedData));
-                        runOnUiThread(() -> handleIncomingMessage(message));
+                        handleIncomingMessage(message);
                     }
                 }
             } catch (Exception e) {
@@ -117,7 +117,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void handleIncomingMessage(UdpMessage message) {
         if (message.getType() == UdpMessages.FULL_STATS) {
-            updatePlayersInfo((StatsMessage) message);
+            runOnUiThread(() -> updatePlayersInfo((StatsMessage) message));
         } else {
             handleEvent((EventMessage) message);
         }
@@ -128,8 +128,8 @@ public class MainActivity extends AppCompatActivity {
         for (Player player : message.getPlayers()) {
             if (player.getId() == PLAYER_ID) {
                 playerName.setText(player.getName());
-                playerHealth.setText(player.getHealth());
-                playerScore.setText(player.getScore());
+                playerHealth.setText(String.valueOf(player.getHealth()));
+                playerScore.setText(String.valueOf(player.getScore()));
             }
             TableRow row = new TableRow(this);
 
@@ -138,11 +138,11 @@ public class MainActivity extends AppCompatActivity {
             nameText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
 
             TextView scoreText = new TextView(this);
-            scoreText.setText(player.getScore());
+            scoreText.setText(String.valueOf(player.getScore()));
             scoreText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
 
             TextView healthText = new TextView(this);
-            healthText.setText(player.getHealth());
+            healthText.setText(String.valueOf(player.getHealth()));
             healthText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
 
             row.addView(nameText);
@@ -159,10 +159,16 @@ public class MainActivity extends AppCompatActivity {
         bulletsLeft.setText(String.valueOf(message.getBulletsLeft()));
         switch (message.getType()) {
             case UdpMessages.GUN_SHOT -> soundManager.playGunShot();
-            case UdpMessages.GOT_HIT -> soundManager.playGotHit();
-            case UdpMessages.YOU_HIT_SOMEONE -> soundManager.playYouHitSomeone();
-            case UdpMessages.GUN_NO_BULLETS -> soundManager.playNoBullets();
             case UdpMessages.GUN_RELOAD -> soundManager.playReload();
+            case UdpMessages.YOU_HIT_SOMEONE -> soundManager.playYouHitSomeone();
+            case UdpMessages.GOT_HIT -> soundManager.playGotHit();
+            case UdpMessages.RESPAWN -> soundManager.playRespawn();
+            case UdpMessages.GAME_OVER -> soundManager.playGameOver();
+            case UdpMessages.GAME_START -> soundManager.playGameStart();
+            case UdpMessages.YOU_KILLED -> soundManager.playYouKilled();
+            case UdpMessages.YOU_SCORED -> soundManager.playYouScored();
+            case UdpMessages.GUN_NO_BULLETS -> soundManager.playNoBullets();
+
         }
     }
 
