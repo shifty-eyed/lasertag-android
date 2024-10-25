@@ -7,7 +7,9 @@
     android:layout_height="match_parent"
     android:orientation="horizontal"
     android:background="@color/black"
-    tools:context=".MainActivity">
+    android:screenOrientation="landscape"
+    tools:context=".MainActivity"
+    tools:ignore="DiscouragedApi">
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/player_info_layout"

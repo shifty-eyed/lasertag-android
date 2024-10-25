@@ -15,6 +15,10 @@ public class SoundManager {
     private int reloadSound;
     private int youKilledSound;
     private int respawnSound;
+    private int gameOverSound;
+    private int gameStartSound;
+    private int youScoredSound;
+
 
     public SoundManager(Context context) {
         AudioAttributes audioAttributes = new AudioAttributes.Builder()
@@ -33,6 +37,9 @@ public class SoundManager {
         reloadSound = soundPool.load(context, R.raw.reload, 1);
         youKilledSound = soundPool.load(context, R.raw.death, 1);
         respawnSound = soundPool.load(context, R.raw.respawn, 1);
+        gameOverSound = soundPool.load(context, R.raw.game_over, 1);
+        gameStartSound = soundPool.load(context, R.raw.game_start, 1);
+        youScoredSound = soundPool.load(context, R.raw.you_scored, 1);
 
     }
 
@@ -73,11 +80,14 @@ public class SoundManager {
     }
 
     public void playGameOver() {
+        play(gameOverSound);
     }
 
     public void playGameStart() {
+        play(gameStartSound);
     }
 
     public void playYouScored() {
+        play(youScoredSound);
     }
 }
