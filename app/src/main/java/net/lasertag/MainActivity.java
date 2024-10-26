@@ -7,37 +7,30 @@ import android.content.IntentFilter;
 import android.content.res.Configuration;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
 import android.widget.TableLayout;
 import android.widget.TableRow;
 import android.widget.TextView;
 
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.constraintlayout.widget.ConstraintLayout;
 
 import android.view.Window;
 import android.view.WindowManager;
 
-import net.lasertag.model.AckMessage;
 import net.lasertag.model.EventMessage;
 import net.lasertag.model.Player;
 import net.lasertag.model.StatsMessage;
 import net.lasertag.model.UdpMessage;
 import net.lasertag.model.UdpMessages;
 
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.SocketException;
-import java.net.SocketTimeoutException;
-import java.util.Arrays;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "Lasertag";
-    public static final String SERVER_IP = "192.168.4.95";
-    public static final int SERVER_PORT = 9878;
     public static final int PLAYER_ID = 1;
 
     private final BroadcastReceiver udpMessageReceiver = new BroadcastReceiver() {
@@ -53,8 +46,11 @@ public class MainActivity extends AppCompatActivity {
     private TextView playerScore;
     private TextView bulletsLeft;
     private TableLayout playersTable;
+    private ConstraintLayout playerInfoLayout;
+    private ConstraintLayout announcementLayout;
+    private TextView announcementText;
 
-    private SoundManager soundManager;
+
 
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
@@ -62,7 +58,6 @@ public class MainActivity extends AppCompatActivity {
         Log.i(TAG, "onConfigurationChanged");
     }
 
-    @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Log.i(TAG, "onCreate");
@@ -78,12 +73,32 @@ public class MainActivity extends AppCompatActivity {
         playerScore = findViewById(R.id.player_score);
         bulletsLeft = findViewById(R.id.bullets);
         playersTable = findViewById(R.id.players_table);
+        playerInfoLayout = findViewById(R.id.player_info_layout);
+        announcementLayout = findViewById(R.id.announcement_layout);
+        announcementText = findViewById(R.id.announcement_text);
 
-        soundManager = new SoundManager(this);
-
-        Intent serviceIntent = new Intent(this, NetworkService.class);
-        startService(serviceIntent);
+        showAnnouncementLayout(false);
+        startService(new Intent(this, NetworkService.class));
         registerReceiver(udpMessageReceiver, new IntentFilter("UDP_MESSAGE_RECEIVED"));
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        Log.i(TAG, "onResume");
+        sendBroadcast(new Intent("ACTIVITY_RESUMED"));
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        Log.i(TAG, "onPause");
+        sendBroadcast(new Intent("ACTIVITY_PAUSED"));
+    }
+
+    private void showAnnouncementLayout(boolean show) {
+        announcementLayout.setVisibility(show ? View.VISIBLE : View.GONE);
+        playerInfoLayout.setVisibility(!show ? View.VISIBLE : View.GONE);
     }
 
     private void handleIncomingMessage(UdpMessage message) {
@@ -128,19 +143,6 @@ public class MainActivity extends AppCompatActivity {
         playerHealth.setText(String.valueOf(message.getHealth()));
         playerScore.setText(String.valueOf(message.getScore()));
         bulletsLeft.setText(String.valueOf(message.getBulletsLeft()));
-        switch (message.getType()) {
-            case UdpMessages.GUN_SHOT -> soundManager.playGunShot();
-            case UdpMessages.GUN_RELOAD -> soundManager.playReload();
-            case UdpMessages.YOU_HIT_SOMEONE -> soundManager.playYouHitSomeone();
-            case UdpMessages.GOT_HIT -> soundManager.playGotHit();
-            case UdpMessages.RESPAWN -> soundManager.playRespawn();
-            case UdpMessages.GAME_OVER -> soundManager.playGameOver();
-            case UdpMessages.GAME_START -> soundManager.playGameStart();
-            case UdpMessages.YOU_KILLED -> soundManager.playYouKilled();
-            case UdpMessages.YOU_SCORED -> soundManager.playYouScored();
-            case UdpMessages.GUN_NO_BULLETS -> soundManager.playNoBullets();
-
-        }
     }
 
     @Override
@@ -148,7 +150,6 @@ public class MainActivity extends AppCompatActivity {
         Log.i(TAG, "onDestroy called");
         super.onDestroy();
         unregisterReceiver(udpMessageReceiver);
-        soundManager.release();
     }
 
 }

@@ -22,13 +22,15 @@
 
         <TextView
             android:id="@+id/player_name"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="197dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginTop="4dp"
+            android:singleLine="true"
             android:text="Roma"
             android:textColor="@color/grey"
-            android:textSize="24sp"
+            android:textSize="30sp"
             android:textStyle="bold"
-            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
@@ -39,8 +41,6 @@
             android:layout_marginStart="8dp"
             android:layout_marginLeft="8dp"
             android:layout_marginTop="24dp"
-            android:scaleX="1.2"
-            android:scaleY="1.2"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/player_name"
             app:srcCompat="@drawable/heart" />
@@ -95,16 +95,40 @@
 
         <TextView
             android:id="@+id/bullets"
-            android:layout_width="140dp"
-            android:layout_height="64dp"
+            android:layout_width="100dp"
+            android:layout_height="66dp"
             android:layout_marginStart="32dp"
-            android:layout_marginLeft="16dp"
             android:layout_marginTop="32dp"
-            android:text="8 / 10"
+            android:text="8"
             android:textColor="@color/grey"
             android:textSize="40sp"
             app:layout_constraintStart_toEndOf="@+id/imageView3"
             app:layout_constraintTop_toBottomOf="@+id/player_score" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/announcement_layout"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:visibility="gone">
+        >
+
+        <TextView
+            android:id="@+id/announcement_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Alternative Info"
+            android:textColor="@color/grey"
+            android:textSize="40sp"
+            android:textStyle="bold"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
     <View
