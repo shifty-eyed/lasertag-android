@@ -18,6 +18,7 @@ public class UdpMessages {
     public static final byte YOU_SCORED = 10;
     public static final byte FULL_STATS = 11;
     public static final byte GUN_NO_BULLETS = 12;
+    public static final byte GAME_TIMER = 101;
 
     public static UdpMessage fromBytes(byte[] bytes, int length) {
         ByteBuffer buffer = ByteBuffer.wrap(bytes, 0, length);
@@ -27,12 +28,15 @@ public class UdpMessages {
             return new AckMessage(PING);
         } else if (type == FULL_STATS) {
             return parseFullStatsMessage(buffer);
+        } else if (type == GAME_TIMER) {
+            return parseTimeMessage(type, buffer);
         } else {
             return parseEventMessage(type, buffer);
         }
     }
 
     private static StatsMessage parseFullStatsMessage(ByteBuffer buffer) {
+        var isGameRunning = buffer.get() != 0;
         var playersCount = buffer.get();
         var players = new Player[playersCount];
         for (int i = 0; i < playersCount; i++) {
@@ -46,7 +50,13 @@ public class UdpMessages {
             players[i] = new Player(id, health, score, name);
         }
         Arrays.sort(players, (a, b) -> Integer.compare(b.getScore(), a.getScore()));
-        return new StatsMessage(FULL_STATS, playersCount, players);
+        return new StatsMessage(FULL_STATS, isGameRunning, playersCount, players);
+    }
+
+    private static TimeMessage parseTimeMessage(byte type, ByteBuffer buffer) {
+        var minutes = buffer.get();
+        var seconds = buffer.get();
+        return new TimeMessage(type, minutes, seconds);
     }
 
     private static EventMessage parseEventMessage(byte type, ByteBuffer buffer) {

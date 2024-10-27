@@ -8,8 +8,8 @@ import android.content.IntentFilter;
 import android.os.IBinder;
 import android.util.Log;
 
-import net.lasertag.model.AckMessage;
 import net.lasertag.model.EventMessage;
+import net.lasertag.model.Player;
 import net.lasertag.model.StatsMessage;
 import net.lasertag.model.UdpMessage;
 import net.lasertag.model.UdpMessages;
@@ -17,24 +17,35 @@ import net.lasertag.model.UdpMessages;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.net.SocketTimeoutException;
 import java.util.Arrays;
-import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
 public class NetworkService extends Service {
 
     private static final String TAG = "Lasertag";
+    public static final int STATE_IDLE = 0;
+    public static final int STATE_GAME = 1;
+    public static final int STATE_DEAD = 2;
+    public static final int STATE_OFFLINE = 3;
+
     public static final String SERVER_IP = "192.168.4.95";
     public static final int SERVER_PORT = 9878;
     private static final long HEARTBEAT_INTERVAL = 2000;
+    private static final long HEARTBEAT_TIMEOUT = 5000;
+
     private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(3);
     private DatagramSocket heartbeatSocket;
     private SoundManager soundManager;
 
     private volatile boolean isActive = true;
+    private volatile boolean isGameRunning = false;
+    private volatile boolean isPlayerDead = false;
+    private volatile boolean isOnline = false;
+
+    private volatile Long lastPingTime = 0L;
+    private volatile int currentState = -1;
+
     private StatsMessage lastStatsMessage;
     private EventMessage lastEventMessage;
 
@@ -45,8 +56,9 @@ public class NetworkService extends Service {
                 case "ACTIVITY_PAUSED" -> isActive = false;
                 case "ACTIVITY_RESUMED" -> {
                     isActive = true;
-                    broadcastUdpMessage(lastStatsMessage);
-                    broadcastUdpMessage(lastEventMessage);
+                    sendCurrentStateToActivity();
+                    sendUdpMessageToActivity(lastStatsMessage);
+                    sendUdpMessageToActivity(lastEventMessage);
                     lastStatsMessage = null;
                     lastEventMessage = null;
                 }
@@ -81,6 +93,7 @@ public class NetworkService extends Service {
             heartbeatSocket = new DatagramSocket();
             executorService.scheduleWithFixedDelay(this::heartbeat, 0, HEARTBEAT_INTERVAL, java.util.concurrent.TimeUnit.MILLISECONDS);
             startUDPListener();
+            evaluateCurrentState();
         } catch (Exception e) {
             Log.e(TAG, "Service failed to start", e);
             stopSelf();
@@ -89,6 +102,11 @@ public class NetworkService extends Service {
     }
 
     private void heartbeat() {
+        if (System.currentTimeMillis() - lastPingTime > HEARTBEAT_TIMEOUT) {
+            Log.i(TAG, "LostConnection");
+            isOnline = false;
+            evaluateCurrentState();
+        }
         try {
             byte[] message = new byte[] { UdpMessages.PING, (byte) MainActivity.PLAYER_ID, 0 };
             DatagramPacket packet = new DatagramPacket(message, 3, InetAddress.getByName(SERVER_IP), SERVER_PORT);
@@ -98,24 +116,18 @@ public class NetworkService extends Service {
         }
     }
 
-    private void tickOneSecond() {
-        Log.i(TAG, "tickOneSecond");
-    }
-
     private void startUDPListener() {
         executorService.execute(() -> {
             try (var socket = new DatagramSocket(SERVER_PORT)) {
-                socket.setSoTimeout(1000);
                 var buffer = new byte[512];
                 Log.i(TAG, "Listening on socket: " + socket.getLocalSocketAddress());
                 while (true) {
                     var packet = new DatagramPacket(buffer, buffer.length);
-                    try {
-                        socket.receive(packet);
-                        var message = UdpMessages.fromBytes(packet.getData(), packet.getLength());
-                        playEventSound(message.getType());
-                        broadcastUdpMessage(message);
-                    } catch (SocketTimeoutException ignored) {}
+                    socket.receive(packet);
+                    var message = UdpMessages.fromBytes(packet.getData(), packet.getLength());
+                    handleEvent(message.getType(), message);
+                    sendUdpMessageToActivity(message);
+                    lastPingTime = System.currentTimeMillis();
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Failed to receive UDP message", e);
@@ -123,7 +135,28 @@ public class NetworkService extends Service {
         });
     }
 
-    private void broadcastUdpMessage(UdpMessage message) {
+    private void evaluateCurrentState() {
+        var newState = currentState;
+        if (!isOnline) {
+            newState = STATE_OFFLINE;
+        } else if (!isGameRunning) {
+            newState = STATE_IDLE;
+        } else {
+            newState = isPlayerDead ? STATE_DEAD : STATE_GAME;
+        }
+        if (newState != currentState) {
+            currentState = newState;
+            sendCurrentStateToActivity();
+        }
+    }
+
+    private void sendCurrentStateToActivity() {
+        Intent broadcastIntent = new Intent("CURRENT_STATE");
+        broadcastIntent.putExtra("state", currentState);
+        sendBroadcast(broadcastIntent);
+    }
+
+    private void sendUdpMessageToActivity(UdpMessage message) {
         if (message == null) {
             return;
         }
@@ -138,19 +171,40 @@ public class NetworkService extends Service {
         }
     }
 
-    private void playEventSound(byte eventType) {
+    private void handleEvent(byte eventType, UdpMessage message) {
+        isOnline = true;
         switch (eventType) {
             case UdpMessages.GUN_SHOT -> soundManager.playGunShot();
             case UdpMessages.GUN_RELOAD -> soundManager.playReload();
             case UdpMessages.YOU_HIT_SOMEONE -> soundManager.playYouHitSomeone();
             case UdpMessages.GOT_HIT -> soundManager.playGotHit();
-            case UdpMessages.RESPAWN -> soundManager.playRespawn();
-            case UdpMessages.GAME_OVER -> soundManager.playGameOver();
+            case UdpMessages.RESPAWN -> {
+                soundManager.playRespawn();
+                isGameRunning = true;
+                isPlayerDead = false;
+            }
+            case UdpMessages.GAME_OVER -> {
+                soundManager.playGameOver();
+                isGameRunning = false;
+            }
             case UdpMessages.GAME_START -> soundManager.playGameStart();
-            case UdpMessages.YOU_KILLED -> soundManager.playYouKilled();
+            case UdpMessages.YOU_KILLED -> {
+                soundManager.playYouKilled();
+                isPlayerDead = true;
+            }
             case UdpMessages.YOU_SCORED -> soundManager.playYouScored();
             case UdpMessages.GUN_NO_BULLETS -> soundManager.playNoBullets();
+            case UdpMessages.FULL_STATS -> {
+                var statsMessage = (StatsMessage) message;
+                isGameRunning = statsMessage.isGameRunning();
+                Arrays.stream(statsMessage.getPlayers())
+                        .filter(p -> p.getId() == MainActivity.PLAYER_ID)
+                        .findFirst()
+                        .ifPresent(p -> isPlayerDead = p.getHealth() <= 0);
+            }
+            case UdpMessages.GAME_TIMER -> {}
         }
+        evaluateCurrentState();
     }
 
     @Override

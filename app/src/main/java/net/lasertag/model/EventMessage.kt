@@ -10,6 +10,12 @@ data class AckMessage (
     override val type: Byte
 ): UdpMessage(type)
 
+data class TimeMessage (
+    override val type: Byte,
+    val minutes: Byte,
+    val seconds: Byte
+): UdpMessage(type)
+
 data class EventMessage (
     override val type: Byte,
     val counterpartPlayerId: Byte,
@@ -20,6 +26,7 @@ data class EventMessage (
 
 data class StatsMessage (
     override val type: Byte,
+    val isGameRunning: Boolean,
     val numPlayers: Byte,
     val players: Array<Player>
 ) : UdpMessage(type) {

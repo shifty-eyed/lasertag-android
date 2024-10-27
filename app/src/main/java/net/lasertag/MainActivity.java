@@ -1,5 +1,7 @@
 package net.lasertag;
 
+import static net.lasertag.NetworkService.*;
+
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -22,6 +24,7 @@ import android.view.WindowManager;
 import net.lasertag.model.EventMessage;
 import net.lasertag.model.Player;
 import net.lasertag.model.StatsMessage;
+import net.lasertag.model.TimeMessage;
 import net.lasertag.model.UdpMessage;
 import net.lasertag.model.UdpMessages;
 
@@ -36,8 +39,16 @@ public class MainActivity extends AppCompatActivity {
     private final BroadcastReceiver udpMessageReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            UdpMessage message = (UdpMessage) intent.getSerializableExtra("message");
-            handleIncomingMessage(message);
+            switch (intent.getAction()) {
+                case "CURRENT_STATE" -> {
+                    int state = intent.getIntExtra("state", -1);
+                    handleStateChange(state);
+                }
+                case "UDP_MESSAGE_RECEIVED" -> {
+                    UdpMessage message = (UdpMessage) intent.getSerializableExtra("message");
+                    handleIncomingMessage(message);
+                }
+            }
         }
     };
 
@@ -49,8 +60,9 @@ public class MainActivity extends AppCompatActivity {
     private ConstraintLayout playerInfoLayout;
     private ConstraintLayout announcementLayout;
     private TextView announcementText;
+    private TextView gameTime;
 
-
+    private volatile int currentState = -1;
 
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
@@ -76,10 +88,12 @@ public class MainActivity extends AppCompatActivity {
         playerInfoLayout = findViewById(R.id.player_info_layout);
         announcementLayout = findViewById(R.id.announcement_layout);
         announcementText = findViewById(R.id.announcement_text);
+        gameTime = findViewById(R.id.game_timer);
 
-        showAnnouncementLayout(false);
         startService(new Intent(this, NetworkService.class));
         registerReceiver(udpMessageReceiver, new IntentFilter("UDP_MESSAGE_RECEIVED"));
+        registerReceiver(udpMessageReceiver, new IntentFilter("CURRENT_STATE"));
+        handleStateChange(STATE_OFFLINE);
     }
 
     @Override
@@ -101,12 +115,38 @@ public class MainActivity extends AppCompatActivity {
         playerInfoLayout.setVisibility(!show ? View.VISIBLE : View.GONE);
     }
 
+    private void handleStateChange(int newState) {
+        if (newState == currentState) {
+            return;
+        }
+        switch (newState) {
+            case STATE_IDLE -> {
+                showAnnouncementLayout(true);
+                announcementText.setText("Game is not started.");
+            }
+            case STATE_GAME -> {
+                showAnnouncementLayout(false);
+            }
+            case STATE_DEAD -> {
+                showAnnouncementLayout(true);
+                announcementText.setText("You are dead.");
+            }
+            case STATE_OFFLINE -> {
+                showAnnouncementLayout(true);
+                announcementText.setText("Offline");
+            }
+        }
+        currentState = newState;
+    }
+
     private void handleIncomingMessage(UdpMessage message) {
         if (message instanceof StatsMessage) {
             runOnUiThread(() -> updatePlayersInfo((StatsMessage) message));
         } else if (message instanceof EventMessage) {
             handleEvent((EventMessage) message);
-        } //AckMessage ignored
+        } else if (message instanceof TimeMessage) {
+            handleTime((TimeMessage) message);
+        }//AckMessage ignored
     }
 
     private void updatePlayersInfo(StatsMessage message) {
@@ -143,6 +183,14 @@ public class MainActivity extends AppCompatActivity {
         playerHealth.setText(String.valueOf(message.getHealth()));
         playerScore.setText(String.valueOf(message.getScore()));
         bulletsLeft.setText(String.valueOf(message.getBulletsLeft()));
+    }
+
+    private void handleTime(TimeMessage message) {
+        switch (currentState) {
+            case STATE_IDLE -> announcementText.setText(String.format("Start in %d...", message.getSeconds()));
+            case STATE_GAME -> gameTime.setText(String.format("%02d:%02d", message.getMinutes(), message.getSeconds()));
+            case STATE_DEAD -> announcementText.setText(String.format("You are dead.\nRespawn in %d...", message.getSeconds()));
+        }
     }
 
     @Override
