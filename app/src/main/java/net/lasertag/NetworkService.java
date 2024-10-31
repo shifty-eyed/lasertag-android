@@ -1,5 +1,8 @@
 package net.lasertag;
 
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.Service;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -37,6 +40,7 @@ public class NetworkService extends Service {
     private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(3);
     private DatagramSocket heartbeatSocket;
     private SoundManager soundManager;
+    private static final String CHANNEL_ID = "LasertagForegroundServiceChannel";
 
     private volatile boolean isActive = true;
     private volatile boolean isGameRunning = false;
@@ -48,6 +52,7 @@ public class NetworkService extends Service {
 
     private StatsMessage lastStatsMessage;
     private EventMessage lastEventMessage;
+
 
     private final BroadcastReceiver activityResumedReceiver = new BroadcastReceiver() {
         @Override
@@ -70,8 +75,30 @@ public class NetworkService extends Service {
     public void onCreate() {
         super.onCreate();
         soundManager = new SoundManager(this);
+        createNotificationChannel();
+        Notification notification = new Notification.Builder(this, CHANNEL_ID)
+                .setContentTitle("Your Service is Running")
+                .setContentText("This service will keep running.")
+                .setSmallIcon(R.drawable.ic_launcher_background)
+                .build();
+
+        startForeground(1, notification);
         registerReceiver(activityResumedReceiver, new IntentFilter("ACTIVITY_RESUMED"));
         registerReceiver(activityResumedReceiver, new IntentFilter("ACTIVITY_PAUSED"));
+    }
+
+
+    private void createNotificationChannel() {
+
+            NotificationChannel serviceChannel = new NotificationChannel(
+                    CHANNEL_ID,
+                    "Foreground Service Channel",
+                    NotificationManager.IMPORTANCE_DEFAULT
+            );
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            if (manager != null) {
+                manager.createNotificationChannel(serviceChannel);
+            }
     }
 
     @Override

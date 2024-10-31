@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Configuration;
 import android.os.Bundle;
+import android.os.PowerManager;
 import android.util.Log;
 import android.view.View;
 import android.widget.TableLayout;
@@ -52,6 +53,7 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
+    private PowerManager.WakeLock wakeLock;
     private TextView playerName;
     private TextView playerHealth;
     private TextView playerScore;
@@ -77,6 +79,7 @@ public class MainActivity extends AppCompatActivity {
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         setContentView(R.layout.activity_main);
 
