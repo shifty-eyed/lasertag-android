@@ -12,7 +12,7 @@ import android.os.IBinder;
 import android.util.Log;
 
 import net.lasertag.model.EventMessage;
-import net.lasertag.model.Player;
+import static net.lasertag.Config.*;
 import net.lasertag.model.StatsMessage;
 import net.lasertag.model.UdpMessage;
 import net.lasertag.model.UdpMessages;
@@ -26,21 +26,10 @@ import java.util.concurrent.ScheduledExecutorService;
 
 public class NetworkService extends Service {
 
-    private static final String TAG = "Lasertag";
-    public static final int STATE_IDLE = 0;
-    public static final int STATE_GAME = 1;
-    public static final int STATE_DEAD = 2;
-    public static final int STATE_OFFLINE = 3;
-
-    public static final String SERVER_IP = "192.168.4.95";
-    public static final int SERVER_PORT = 9878;
-    private static final long HEARTBEAT_INTERVAL = 2000;
-    private static final long HEARTBEAT_TIMEOUT = 5000;
-
+    private Config config;
     private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(3);
     private DatagramSocket heartbeatSocket;
     private SoundManager soundManager;
-    private static final String CHANNEL_ID = "LasertagForegroundServiceChannel";
 
     private volatile boolean isActive = true;
     private volatile boolean isGameRunning = false;
@@ -74,6 +63,7 @@ public class NetworkService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        config = new Config(this);
         soundManager = new SoundManager(this);
         createNotificationChannel();
         Notification notification = new Notification.Builder(this, CHANNEL_ID)
@@ -135,8 +125,8 @@ public class NetworkService extends Service {
             evaluateCurrentState();
         }
         try {
-            byte[] message = new byte[] { UdpMessages.PING, (byte) MainActivity.PLAYER_ID, 0 };
-            DatagramPacket packet = new DatagramPacket(message, 3, InetAddress.getByName(SERVER_IP), SERVER_PORT);
+            byte[] message = new byte[] { UdpMessages.PING, config.getPlayerId(), 0 };
+            DatagramPacket packet = new DatagramPacket(message, 3, config.getServerAddress(), SERVER_PORT);
             heartbeatSocket.send(packet);
         } catch (Exception e) {
             Log.e(TAG, "Failed to send heartbeat", e);
@@ -225,7 +215,7 @@ public class NetworkService extends Service {
                 var statsMessage = (StatsMessage) message;
                 isGameRunning = statsMessage.isGameRunning();
                 Arrays.stream(statsMessage.getPlayers())
-                        .filter(p -> p.getId() == MainActivity.PLAYER_ID)
+                        .filter(p -> p.getId() == config.getPlayerId())
                         .findFirst()
                         .ifPresent(p -> isPlayerDead = p.getHealth() <= 0);
             }

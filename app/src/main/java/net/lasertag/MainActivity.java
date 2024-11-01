@@ -1,6 +1,6 @@
 package net.lasertag;
 
-import static net.lasertag.NetworkService.*;
+import static net.lasertag.Config.*;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -18,6 +18,7 @@ import android.widget.TextView;
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.constraintlayout.widget.ConstraintLayout;
+import androidx.core.content.res.ResourcesCompat;
 
 import android.view.Window;
 import android.view.WindowManager;
@@ -27,15 +28,8 @@ import net.lasertag.model.Player;
 import net.lasertag.model.StatsMessage;
 import net.lasertag.model.TimeMessage;
 import net.lasertag.model.UdpMessage;
-import net.lasertag.model.UdpMessages;
-
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 
 public class MainActivity extends AppCompatActivity {
-
-    private static final String TAG = "Lasertag";
-    public static final int PLAYER_ID = 1;
 
     private final BroadcastReceiver udpMessageReceiver = new BroadcastReceiver() {
         @Override
@@ -53,6 +47,7 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
+    private Config config;
     private PowerManager.WakeLock wakeLock;
     private TextView playerName;
     private TextView playerHealth;
@@ -74,7 +69,9 @@ public class MainActivity extends AppCompatActivity {
 
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        config = new Config(this);
         Log.i(TAG, "onCreate");
+
         EdgeToEdge.enable(this);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
@@ -155,22 +152,30 @@ public class MainActivity extends AppCompatActivity {
     private void updatePlayersInfo(StatsMessage message) {
         playersTable.removeViews(1, Math.max(0, playersTable.getChildCount() - 1));
         for (Player player : message.getPlayers()) {
-            if (player.getId() == PLAYER_ID) {
+            if (player.getId() == config.getPlayerId()) {
                 playerName.setText(player.getName());
                 playerHealth.setText(String.valueOf(player.getHealth()));
                 playerScore.setText(String.valueOf(player.getScore()));
             }
             TableRow row = new TableRow(this);
+            row.setPadding(8, 8, 8, 8);
+            row.setBackground(ResourcesCompat.getDrawable(getResources(), R.drawable.table_row_border, null));
 
             TextView nameText = new TextView(this);
+            nameText.setTextColor(ResourcesCompat.getColor(getResources(), R.color.white, null));
+            nameText.setPadding(8, 8, 8, 8);
             nameText.setText(player.getName());
             nameText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
 
             TextView scoreText = new TextView(this);
+            scoreText.setTextColor(ResourcesCompat.getColor(getResources(), R.color.white, null));
+            scoreText.setPadding(8, 8, 8, 8);
             scoreText.setText(String.valueOf(player.getScore()));
             scoreText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
 
             TextView healthText = new TextView(this);
+            healthText.setTextColor(ResourcesCompat.getColor(getResources(), R.color.white, null));
+            healthText.setPadding(8, 8, 8, 8);
             healthText.setText(String.valueOf(player.getHealth()));
             healthText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
 

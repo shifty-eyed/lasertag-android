@@ -160,13 +160,18 @@
         <TableLayout
             android:id="@+id/players_table"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content">
+            android:layout_height="wrap_content"
+            android:padding="16dp"
+            android:stretchColumns="1"
+            >
 
             <!-- Table Header -->
-            <TableRow>
+            <TableRow
+                android:background="@color/tableHeaderBackground"
+                android:padding="8dp">
                 <TextView
                     android:text="Name"
-                    android:textColor="@color/grey"
+                    android:textColor="@color/headerTextColor"
                     android:textStyle="bold"
                     android:layout_weight="1"
                     android:layout_width="0dp"
@@ -175,7 +180,7 @@
                 <TextView
                     android:text="Score"
                     android:textStyle="bold"
-                    android:textColor="@color/grey"
+                    android:textColor="@color/headerTextColor"
                     android:layout_weight="1"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content" />
@@ -183,7 +188,7 @@
                 <TextView
                     android:text="Health"
                     android:textStyle="bold"
-                    android:textColor="@color/grey"
+                    android:textColor="@color/headerTextColor"
                     android:layout_weight="1"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content" />
