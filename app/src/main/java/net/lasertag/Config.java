@@ -14,7 +14,7 @@ public class Config {
 
     private static final String PREFS_NAME = "LaserTagPrefs";
     private static final String PLAYER_ID_KEY = "player_id";
-    public static final int DEFAULT_PLAYER_ID = 1;
+    public static final int DEFAULT_PLAYER_ID = 2;
     private static final String SERVER_IP = "server_ip";
     private static final String DEFAULT_SERVER_IP = "192.168.4.95";
 
