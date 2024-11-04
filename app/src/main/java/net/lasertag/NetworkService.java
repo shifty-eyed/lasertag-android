@@ -126,7 +126,8 @@ public class NetworkService extends Service {
         }
         try {
             byte[] message = new byte[] { UdpMessages.PING, config.getPlayerId(), 0 };
-            DatagramPacket packet = new DatagramPacket(message, 3, config.getServerAddress(), SERVER_PORT);
+            var ip = config.getServerAddress() == null ? config.getBroadcastAddress() : config.getServerAddress();
+            DatagramPacket packet = new DatagramPacket(message, 3, ip, SERVER_PORT);
             heartbeatSocket.send(packet);
         } catch (Exception e) {
             Log.e(TAG, "Failed to send heartbeat", e);
@@ -135,13 +136,17 @@ public class NetworkService extends Service {
 
     private void startUDPListener() {
         executorService.execute(() -> {
-            try (var socket = new DatagramSocket(SERVER_PORT)) {
+            try (var socket = new DatagramSocket(LISTENING_PORT)) {
                 var buffer = new byte[512];
                 Log.i(TAG, "Listening on socket: " + socket.getLocalSocketAddress());
                 while (true) {
                     var packet = new DatagramPacket(buffer, buffer.length);
                     socket.receive(packet);
                     var message = UdpMessages.fromBytes(packet.getData(), packet.getLength());
+                    if (config.getServerAddress() == null) {
+                        Log.i(TAG, "Server IP discovered: " + packet.getAddress());
+                        config.setServerAddress(packet.getAddress());
+                    }
                     handleEvent(message.getType(), message);
                     sendUdpMessageToActivity(message);
                     lastPingTime = System.currentTimeMillis();
