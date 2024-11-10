@@ -18,6 +18,7 @@ import android.widget.TextView;
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.constraintlayout.widget.ConstraintLayout;
+import androidx.core.content.ContextCompat;
 import androidx.core.content.res.ResourcesCompat;
 
 import android.view.Window;
@@ -32,6 +33,7 @@ import net.lasertag.model.UdpMessage;
 public class MainActivity extends AppCompatActivity {
 
     private final BroadcastReceiver udpMessageReceiver = new BroadcastReceiver() {
+
         @Override
         public void onReceive(Context context, Intent intent) {
             switch (intent.getAction()) {
@@ -86,8 +88,8 @@ public class MainActivity extends AppCompatActivity {
         gameTime = findViewById(R.id.game_timer);
 
         startService(new Intent(this, NetworkService.class));
-        registerReceiver(udpMessageReceiver, new IntentFilter("UDP_MESSAGE_RECEIVED"));
-        registerReceiver(udpMessageReceiver, new IntentFilter("CURRENT_STATE"));
+        registerReceiver(udpMessageReceiver, new IntentFilter("UDP_MESSAGE_RECEIVED"), Context.RECEIVER_EXPORTED);
+        registerReceiver(udpMessageReceiver, new IntentFilter("CURRENT_STATE"), Context.RECEIVER_EXPORTED);
         handleStateChange(STATE_OFFLINE);
     }
 

@@ -73,8 +73,8 @@ public class NetworkService extends Service {
                 .build();
 
         startForeground(1, notification);
-        registerReceiver(activityResumedReceiver, new IntentFilter("ACTIVITY_RESUMED"));
-        registerReceiver(activityResumedReceiver, new IntentFilter("ACTIVITY_PAUSED"));
+        registerReceiver(activityResumedReceiver, new IntentFilter("ACTIVITY_RESUMED"), Context.RECEIVER_EXPORTED);
+        registerReceiver(activityResumedReceiver, new IntentFilter("ACTIVITY_PAUSED"), Context.RECEIVER_EXPORTED);
     }
 
 
