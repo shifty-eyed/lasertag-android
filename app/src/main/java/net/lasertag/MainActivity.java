@@ -43,6 +43,11 @@ import java.util.Objects;
 @SuppressLint({"SetTextI18n","InlinedApi","DefaultLocale"})
 public class MainActivity extends AppCompatActivity {
 
+    /* TODO:
+    - better sounds, got hit
+    - screen announcements: killed by, you killed .., game over, ... win
+    - speech announcements*/
+
     private final BroadcastReceiver udpMessageReceiver = new BroadcastReceiver() {
 
         @Override
