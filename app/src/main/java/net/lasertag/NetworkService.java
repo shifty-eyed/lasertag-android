@@ -8,11 +8,15 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
 
 import net.lasertag.model.EventMessage;
 import static net.lasertag.Config.*;
+
+import androidx.annotation.RequiresApi;
+
 import net.lasertag.model.StatsMessage;
 import net.lasertag.model.UdpMessage;
 import net.lasertag.model.UdpMessages;
@@ -21,6 +25,7 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -35,6 +40,7 @@ public class NetworkService extends Service {
     private volatile boolean isGameRunning = false;
     private volatile boolean isPlayerDead = false;
     private volatile boolean isOnline = false;
+    private volatile boolean teamPlay = false;
 
     private volatile Long lastPingTime = 0L;
     private volatile int currentState = -1;
@@ -46,7 +52,7 @@ public class NetworkService extends Service {
     private final BroadcastReceiver activityResumedReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            switch (intent.getAction()) {
+            switch (Objects.requireNonNull(intent.getAction())) {
                 case "ACTIVITY_PAUSED" -> isActive = false;
                 case "ACTIVITY_RESUMED" -> {
                     isActive = true;
@@ -175,6 +181,7 @@ public class NetworkService extends Service {
     private void sendCurrentStateToActivity() {
         Intent broadcastIntent = new Intent("CURRENT_STATE");
         broadcastIntent.putExtra("state", currentState);
+        broadcastIntent.putExtra("teamPlay", teamPlay);
         sendBroadcast(broadcastIntent);
     }
 
@@ -209,7 +216,10 @@ public class NetworkService extends Service {
                 soundManager.playGameOver();
                 isGameRunning = false;
             }
-            case UdpMessages.GAME_START -> soundManager.playGameStart();
+            case UdpMessages.GAME_START -> {
+                soundManager.playGameStart();
+                teamPlay = ((EventMessage) message).getCounterpartPlayerId() != 0;
+            }
             case UdpMessages.YOU_KILLED -> {
                 soundManager.playYouKilled();
                 isPlayerDead = true;

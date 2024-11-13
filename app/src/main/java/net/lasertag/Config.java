@@ -55,4 +55,16 @@ public class Config {
     public InetAddress getBroadcastAddress() {
         return broadcastAddress;
     }
+
+    public int getTeamColor(int teamId) {
+        return switch (teamId) {
+            case 1 -> R.color.tableRowBackgroundRed;
+            case 2 -> R.color.tableRowBackgroundBlue;
+            case 3 -> R.color.tableRowBackgroundGreen;
+            case 4 -> R.color.tableRowBackgroundYellow;
+            case 5 -> R.color.tableRowBackgroundMagenta;
+            case 6 -> R.color.tableRowBackgroundCyan;
+            default -> R.color.tableRowBackground;
+        };
+    }
 }

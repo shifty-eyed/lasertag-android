@@ -43,11 +43,12 @@ public class UdpMessages {
             var id = buffer.get();
             var health = buffer.get();
             var score = buffer.get();
+            var teamId = buffer.get();
             var nameLength = buffer.get();
             var nameBytes = new byte[nameLength];
             buffer.get(nameBytes, 0, nameLength);
             var name = new String(nameBytes);
-            players[i] = new Player(id, health, score, name);
+            players[i] = new Player(id, health, score, teamId, name);
         }
         Arrays.sort(players, (a, b) -> Integer.compare(b.getScore(), a.getScore()));
         return new StatsMessage(FULL_STATS, isGameRunning, playersCount, players);

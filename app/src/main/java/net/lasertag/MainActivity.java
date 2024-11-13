@@ -2,23 +2,28 @@ package net.lasertag;
 
 import static net.lasertag.Config.*;
 
+import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Configuration;
+import android.graphics.Paint;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.View;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TableLayout;
 import android.widget.TableRow;
 import android.widget.TextView;
 
 import androidx.activity.EdgeToEdge;
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.constraintlayout.widget.ConstraintLayout;
-import androidx.core.content.ContextCompat;
 import androidx.core.content.res.ResourcesCompat;
 
 import android.view.Window;
@@ -30,15 +35,22 @@ import net.lasertag.model.StatsMessage;
 import net.lasertag.model.TimeMessage;
 import net.lasertag.model.UdpMessage;
 
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+
+@SuppressLint({"SetTextI18n","InlinedApi","DefaultLocale"})
 public class MainActivity extends AppCompatActivity {
 
     private final BroadcastReceiver udpMessageReceiver = new BroadcastReceiver() {
 
         @Override
         public void onReceive(Context context, Intent intent) {
-            switch (intent.getAction()) {
+            switch (Objects.requireNonNull(intent.getAction())) {
                 case "CURRENT_STATE" -> {
                     int state = intent.getIntExtra("state", -1);
+                    teamPlay = intent.getBooleanExtra("teamPlay", false);
                     handleStateChange(state);
                 }
                 case "UDP_MESSAGE_RECEIVED" -> {
@@ -50,21 +62,22 @@ public class MainActivity extends AppCompatActivity {
     };
 
     private Config config;
-    private PowerManager.WakeLock wakeLock;
     private TextView playerName;
     private TextView playerHealth;
     private TextView playerScore;
-    private TextView bulletsLeft;
     private TableLayout playersTable;
     private ConstraintLayout playerInfoLayout;
     private ConstraintLayout announcementLayout;
     private TextView announcementText;
     private TextView gameTime;
+    private LinearLayout bulletsBar;
+    private LinearLayout teamScoresBar;
 
     private volatile int currentState = -1;
+    private volatile boolean teamPlay = false;
 
     @Override
-    public void onConfigurationChanged(Configuration newConfig) {
+    public void onConfigurationChanged(@NonNull Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         Log.i(TAG, "onConfigurationChanged");
     }
@@ -80,12 +93,13 @@ public class MainActivity extends AppCompatActivity {
         playerName = findViewById(R.id.player_name);
         playerHealth = findViewById(R.id.player_health);
         playerScore = findViewById(R.id.player_score);
-        bulletsLeft = findViewById(R.id.bullets);
         playersTable = findViewById(R.id.players_table);
         playerInfoLayout = findViewById(R.id.player_info_layout);
         announcementLayout = findViewById(R.id.announcement_layout);
         announcementText = findViewById(R.id.announcement_text);
         gameTime = findViewById(R.id.game_timer);
+        bulletsBar = findViewById(R.id.bullets_bar);
+        teamScoresBar = findViewById(R.id.team_scores);
 
         startService(new Intent(this, NetworkService.class));
         registerReceiver(udpMessageReceiver, new IntentFilter("UDP_MESSAGE_RECEIVED"), Context.RECEIVER_EXPORTED);
@@ -166,46 +180,76 @@ public class MainActivity extends AppCompatActivity {
 
     private void updatePlayersInfo(StatsMessage message) {
         playersTable.removeViews(1, Math.max(0, playersTable.getChildCount() - 1));
+        teamScoresBar.removeAllViews();
+        Map<Byte, Integer> teamScores = new HashMap<>();
+
         for (Player player : message.getPlayers()) {
+            teamScores.put(player.getTeamId(), teamScores.getOrDefault(player.getTeamId(), 0) + player.getScore());
             if (player.getId() == config.getPlayerId()) {
                 playerName.setText(player.getName());
+                playerName.setBackgroundColor(ResourcesCompat.getColor(getResources(), config.getTeamColor(player.getTeamId()), null));
                 playerHealth.setText(String.valueOf(player.getHealth()));
                 playerScore.setText(String.valueOf(player.getScore()));
             }
             TableRow row = new TableRow(this);
             row.setPadding(8, 8, 8, 8);
             row.setBackground(ResourcesCompat.getDrawable(getResources(), R.drawable.table_row_border, null));
+            row.setBackgroundColor(ResourcesCompat.getColor(getResources(), config.getTeamColor(player.getTeamId()), null));
 
             TextView nameText = new TextView(this);
-            nameText.setTextColor(ResourcesCompat.getColor(getResources(), R.color.white, null));
-            nameText.setPadding(8, 8, 8, 8);
             nameText.setText(player.getName());
-            nameText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
+            nameText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 2));
 
             TextView scoreText = new TextView(this);
-            scoreText.setTextColor(ResourcesCompat.getColor(getResources(), R.color.white, null));
-            scoreText.setPadding(8, 8, 8, 8);
             scoreText.setText(String.valueOf(player.getScore()));
             scoreText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
 
             TextView healthText = new TextView(this);
-            healthText.setTextColor(ResourcesCompat.getColor(getResources(), R.color.white, null));
-            healthText.setPadding(8, 8, 8, 8);
             healthText.setText(String.valueOf(player.getHealth()));
             healthText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
 
-            row.addView(nameText);
-            row.addView(scoreText);
-            row.addView(healthText);
+            var textFields = Arrays.asList(nameText, scoreText, healthText);
 
+            for (TextView text : textFields) {
+                if (player.getHealth() <= 0) {
+                    text.setPaintFlags(text.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG);
+                }
+                text.setPadding(8, 8, 8, 8);
+                text.setTextColor(ResourcesCompat.getColor(getResources(), R.color.white, null));
+                row.addView(text);
+            }
             playersTable.addView(row);
+        }
+
+        if (teamPlay) {
+            for (Map.Entry<Byte, Integer> e : teamScores.entrySet()) {
+                TextView teamScore = new TextView(this);
+                teamScore.setTextColor(ResourcesCompat.getColor(getResources(), R.color.white, null));
+                teamScore.setPadding(16, 8, 8, 8);
+                teamScore.setTextSize(30);
+                teamScore.setText(String.valueOf(e.getValue()));
+                teamScore.setBackgroundColor(ResourcesCompat.getColor(getResources(), config.getTeamColor(e.getKey()), null));
+                teamScore.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1));
+                teamScoresBar.addView(teamScore);
+            }
         }
     }
 
     private void handleEvent(EventMessage message) {
         playerHealth.setText(String.valueOf(message.getHealth()));
         playerScore.setText(String.valueOf(message.getScore()));
-        bulletsLeft.setText(String.valueOf(message.getBulletsLeft()));
+        refreshBulletsBar(message.getBulletsLeft());
+    }
+
+    private void refreshBulletsBar(int bulletsLeft) {
+        bulletsBar.removeAllViews();
+        for (int i = 0; i < bulletsLeft; i++) {
+            ImageView bullet = new ImageView(this);
+            bullet.setImageResource(R.drawable.bullet);
+            bullet.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT));
+            bulletsBar.addView(bullet);
+        }
     }
 
     private void handleTime(TimeMessage message) {
