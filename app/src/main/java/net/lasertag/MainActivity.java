@@ -10,9 +10,9 @@ import android.content.IntentFilter;
 import android.content.res.Configuration;
 import android.graphics.Paint;
 import android.os.Bundle;
-import android.os.PowerManager;
+import android.os.Handler;
+import android.speech.tts.TextToSpeech;
 import android.util.Log;
-import android.view.Gravity;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -34,29 +34,40 @@ import net.lasertag.model.Player;
 import net.lasertag.model.StatsMessage;
 import net.lasertag.model.TimeMessage;
 import net.lasertag.model.UdpMessage;
+import net.lasertag.model.UdpMessages;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
 @SuppressLint({"SetTextI18n","InlinedApi","DefaultLocale"})
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements TextToSpeech.OnInitListener {
 
-    /* TODO:
-    - better sounds, got hit
-    - screen announcements: killed by, you killed .., game over, ... win
-    - speech announcements*/
+    /*
+
+    - better sounds, game start and over
+    - fix bug with delayed leader announcement causing delayed table update
+
+    */
 
     private final BroadcastReceiver udpMessageReceiver = new BroadcastReceiver() {
 
         @Override
-        public void onReceive(Context context, Intent intent) {
+        public synchronized void onReceive(Context context, Intent intent) {
             switch (Objects.requireNonNull(intent.getAction())) {
                 case "CURRENT_STATE" -> {
-                    int state = intent.getIntExtra("state", -1);
+                    var state = intent.getIntExtra("state", -1);
                     teamPlay = intent.getBooleanExtra("teamPlay", false);
-                    handleStateChange(state);
+                    if (state != currentState) {
+                        currentState = state;
+                        if (!toasterOn) {
+                            onRefreshUIGameSate();
+                        }
+                    }
                 }
                 case "UDP_MESSAGE_RECEIVED" -> {
                     UdpMessage message = (UdpMessage) intent.getSerializableExtra("message");
@@ -78,8 +89,14 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout bulletsBar;
     private LinearLayout teamScoresBar;
 
+    private TextToSpeech textToSpeech;
+
+    private static final String[] uhVariants = new String[] {"uh!", "ouch!", "ah!", "oh!", "oi!"};
+    private int lastUhVariant = 0;
     private volatile int currentState = -1;
     private volatile boolean teamPlay = false;
+    private volatile List<Player> players = Collections.emptyList();
+    private volatile boolean toasterOn = false;
 
     @Override
     public void onConfigurationChanged(@NonNull Configuration newConfig) {
@@ -89,8 +106,9 @@ public class MainActivity extends AppCompatActivity {
 
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        config = new Config(this);
         Log.i(TAG, "onCreate");
+        config = new Config(this);
+        textToSpeech = new TextToSpeech(this, this);
 
         enableFullScreenMode();
         setContentView(R.layout.activity_main);
@@ -109,7 +127,21 @@ public class MainActivity extends AppCompatActivity {
         startService(new Intent(this, NetworkService.class));
         registerReceiver(udpMessageReceiver, new IntentFilter("UDP_MESSAGE_RECEIVED"), Context.RECEIVER_EXPORTED);
         registerReceiver(udpMessageReceiver, new IntentFilter("CURRENT_STATE"), Context.RECEIVER_EXPORTED);
-        handleStateChange(STATE_OFFLINE);
+        currentState = STATE_OFFLINE;
+        onRefreshUIGameSate();
+    }
+
+    @Override
+    public void onInit(int status) {
+        if (status == TextToSpeech.SUCCESS) {
+            int result = textToSpeech.setLanguage(Locale.US);
+            textToSpeech.setSpeechRate(0.7f);
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                Log.e(TAG, "Language not supported");
+            }
+        } else {
+            Log.e(TAG, "Initialization failed");
+        }
     }
 
     private void enableFullScreenMode() {
@@ -149,17 +181,22 @@ public class MainActivity extends AppCompatActivity {
         playerInfoLayout.setVisibility(!show ? View.VISIBLE : View.GONE);
     }
 
-    private void handleStateChange(int newState) {
-        if (newState == currentState) {
-            return;
-        }
-        switch (newState) {
+    private void showToasterMessage(String message, long delayMillis) {
+        toasterOn = true;
+        showAnnouncementLayout(true);
+        announcementText.setText(message);
+        new Handler().postDelayed(
+                () -> textToSpeech.speak(message, TextToSpeech.QUEUE_ADD, null, null), 1000);
+        new Handler().postDelayed(this::onRefreshUIGameSate, delayMillis);
+    }
+
+    private void onRefreshUIGameSate() {
+        toasterOn = false;
+        switch (currentState) {
+            case STATE_GAME -> showAnnouncementLayout(false);
             case STATE_IDLE -> {
                 showAnnouncementLayout(true);
                 announcementText.setText("Game is not started.");
-            }
-            case STATE_GAME -> {
-                showAnnouncementLayout(false);
             }
             case STATE_DEAD -> {
                 showAnnouncementLayout(true);
@@ -170,7 +207,48 @@ public class MainActivity extends AppCompatActivity {
                 announcementText.setText("Offline");
             }
         }
-        currentState = newState;
+    }
+
+    private void handleEvent(EventMessage message) {
+        playerHealth.setText(String.valueOf(message.getHealth()));
+        playerScore.setText(String.valueOf(message.getScore()));
+        refreshBulletsBar(message.getBulletsLeft());
+        var otherPlayer = getPlayerById(message.getCounterpartPlayerId());
+        var otherName = otherPlayer != null ? otherPlayer.getName() : "someone";
+        switch (message.getType()) {
+            case UdpMessages.GOT_HIT -> {
+                var uhVariant = lastUhVariant;
+                while (uhVariant == lastUhVariant) {
+                    uhVariant = (int) (Math.random() * uhVariants.length);
+                }
+                textToSpeech.speak(uhVariants[uhVariant], TextToSpeech.QUEUE_ADD, null, null);
+                lastUhVariant = uhVariant;
+            }
+            case UdpMessages.RESPAWN -> showToasterMessage("Play!", 2000);
+            case UdpMessages.YOU_KILLED -> showToasterMessage(otherName + " killed you.", 3000);
+            case UdpMessages.YOU_SCORED -> showToasterMessage("You killed " + otherName, 2000);
+            case UdpMessages.GAME_OVER -> {
+                if (message.getCounterpartPlayerId() == config.getPlayerId()) {
+                    showToasterMessage("You win!", 4000);
+                } else {
+                    showToasterMessage("Game Over!\n" + (otherPlayer == null ? "No one" : otherPlayer.getName()) + " wins.", 4000);
+                }
+            }
+        }
+    }
+
+    private void handleTime(TimeMessage message) {
+        if (!toasterOn) {
+            switch (currentState) {
+                case STATE_IDLE -> announcementText.setText(String.format("Start in %d...", message.getSeconds()));
+                case STATE_GAME -> gameTime.setText(String.format("%02d:%02d", message.getMinutes(), message.getSeconds()));
+                case STATE_DEAD -> announcementText.setText(String.format("You are dead.\nRespawn in %d...", message.getSeconds()));
+            }
+            if ((currentState == STATE_IDLE || currentState == STATE_DEAD)
+                    && message.getMinutes() == 0 && message.getSeconds() < 4 && message.getSeconds() > 0) {
+                textToSpeech.speak(String.valueOf(message.getSeconds()), TextToSpeech.QUEUE_ADD, null, null);
+            }
+        }
     }
 
     private void handleIncomingMessage(UdpMessage message) {
@@ -183,7 +261,22 @@ public class MainActivity extends AppCompatActivity {
         }//AckMessage ignored
     }
 
+    private void compateOldAndNewPlayersInfoAnnounceLeaderChange(Player[] newPlayers) {
+        if (players.size() != newPlayers.length) {
+            return;
+        }
+        var oldLeader = players.get(0);
+        var newLeader = newPlayers[0];
+        if (oldLeader.getId() != newLeader.getId() && newLeader.getScore() > 0) {
+            var message =  (newLeader.getScore() == oldLeader.getScore() ? "You are tie!" :
+                    (newLeader.getId() == config.getPlayerId() ? "You are" : newLeader.getName() + " is") + " the new leader!");
+            new Handler().postDelayed(() -> textToSpeech.speak(message, TextToSpeech.QUEUE_ADD, null, null), toasterOn ? 2000 : 100);
+        }
+    }
+
     private void updatePlayersInfo(StatsMessage message) {
+        compateOldAndNewPlayersInfoAnnounceLeaderChange(message.getPlayers());
+        players = Arrays.asList(message.getPlayers());
         playersTable.removeViews(1, Math.max(0, playersTable.getChildCount() - 1));
         teamScoresBar.removeAllViews();
         Map<Byte, Integer> teamScores = new HashMap<>();
@@ -192,14 +285,14 @@ public class MainActivity extends AppCompatActivity {
             teamScores.put(player.getTeamId(), teamScores.getOrDefault(player.getTeamId(), 0) + player.getScore());
             if (player.getId() == config.getPlayerId()) {
                 playerName.setText(player.getName());
-                playerName.setBackgroundColor(ResourcesCompat.getColor(getResources(), config.getTeamColor(player.getTeamId()), null));
+                playerName.setBackgroundColor(ResourcesCompat.getColor(getResources(), config.getTeamColor(player.getTeamId(), true), null));
                 playerHealth.setText(String.valueOf(player.getHealth()));
                 playerScore.setText(String.valueOf(player.getScore()));
             }
             TableRow row = new TableRow(this);
             row.setPadding(8, 8, 8, 8);
             row.setBackground(ResourcesCompat.getDrawable(getResources(), R.drawable.table_row_border, null));
-            row.setBackgroundColor(ResourcesCompat.getColor(getResources(), config.getTeamColor(player.getTeamId()), null));
+            row.setBackgroundColor(ResourcesCompat.getColor(getResources(), config.getTeamColor(player.getTeamId(), true), null));
 
             TextView nameText = new TextView(this);
             nameText.setText(player.getName());
@@ -216,11 +309,13 @@ public class MainActivity extends AppCompatActivity {
             var textFields = Arrays.asList(nameText, scoreText, healthText);
 
             for (TextView text : textFields) {
+                text.setPadding(8, 8, 8, 8);
                 if (player.getHealth() <= 0) {
                     text.setPaintFlags(text.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG);
+                    text.setTextColor(ResourcesCompat.getColor(getResources(), R.color.black, null));
+                } else {
+                    text.setTextColor(ResourcesCompat.getColor(getResources(), R.color.white, null));
                 }
-                text.setPadding(8, 8, 8, 8);
-                text.setTextColor(ResourcesCompat.getColor(getResources(), R.color.white, null));
                 row.addView(text);
             }
             playersTable.addView(row);
@@ -233,17 +328,11 @@ public class MainActivity extends AppCompatActivity {
                 teamScore.setPadding(16, 8, 8, 8);
                 teamScore.setTextSize(30);
                 teamScore.setText(String.valueOf(e.getValue()));
-                teamScore.setBackgroundColor(ResourcesCompat.getColor(getResources(), config.getTeamColor(e.getKey()), null));
+                teamScore.setBackgroundColor(ResourcesCompat.getColor(getResources(), config.getTeamColor(e.getKey(), true), null));
                 teamScore.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1));
                 teamScoresBar.addView(teamScore);
             }
         }
-    }
-
-    private void handleEvent(EventMessage message) {
-        playerHealth.setText(String.valueOf(message.getHealth()));
-        playerScore.setText(String.valueOf(message.getScore()));
-        refreshBulletsBar(message.getBulletsLeft());
     }
 
     private void refreshBulletsBar(int bulletsLeft) {
@@ -257,17 +346,22 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void handleTime(TimeMessage message) {
-        switch (currentState) {
-            case STATE_IDLE -> announcementText.setText(String.format("Start in %d...", message.getSeconds()));
-            case STATE_GAME -> gameTime.setText(String.format("%02d:%02d", message.getMinutes(), message.getSeconds()));
-            case STATE_DEAD -> announcementText.setText(String.format("You are dead.\nRespawn in %d...", message.getSeconds()));
+    private Player getPlayerById(byte id) {
+        for (Player player : players) {
+            if (player.getId() == id) {
+                return player;
+            }
         }
+        return null;
     }
 
     @Override
     protected void onDestroy() {
         Log.i(TAG, "onDestroy called");
+        if (textToSpeech != null) {
+            textToSpeech.stop();
+            textToSpeech.shutdown();
+        }
         super.onDestroy();
         unregisterReceiver(udpMessageReceiver);
     }

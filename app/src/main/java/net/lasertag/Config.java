@@ -56,14 +56,14 @@ public class Config {
         return broadcastAddress;
     }
 
-    public int getTeamColor(int teamId) {
+    public int getTeamColor(int teamId, boolean background) {
         return switch (teamId) {
-            case 1 -> R.color.tableRowBackgroundRed;
-            case 2 -> R.color.tableRowBackgroundBlue;
-            case 3 -> R.color.tableRowBackgroundGreen;
-            case 4 -> R.color.tableRowBackgroundYellow;
-            case 5 -> R.color.tableRowBackgroundMagenta;
-            case 6 -> R.color.tableRowBackgroundCyan;
+            case 1 -> background ? R.color.tableRowBackgroundRed : R.color.nameTextRed;
+            case 2 -> background ? R.color.tableRowBackgroundBlue : R.color.nameTextBlue;
+            case 3 -> background ? R.color.tableRowBackgroundGreen : R.color.nameTextGreen;
+            case 4 -> background ? R.color.tableRowBackgroundYellow : R.color.nameTextYellow;
+            case 5 -> background ? R.color.tableRowBackgroundMagenta : R.color.nameTextMagenta;
+            case 6 -> background ? R.color.tableRowBackgroundCyan : R.color.nameTextCyan;
             default -> R.color.tableRowBackground;
         };
     }

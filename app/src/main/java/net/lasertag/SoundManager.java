@@ -6,19 +6,18 @@ import android.media.SoundPool;
 
 public class SoundManager {
 
-    private SoundPool soundPool;
+    private final SoundPool soundPool;
 
-    private int gunShotSound;
-    private int gotHitSound;
-    private int youHitSomeoneSound;
-    private int noBulletsSound;
-    private int reloadSound;
-    private int youKilledSound;
-    private int respawnSound;
-    private int gameOverSound;
-    private int gameStartSound;
-    private int youScoredSound;
-
+    private final int gunShotSound;
+    private final int gotHitSound;
+    private final int youHitSomeoneSound;
+    private final int noBulletsSound;
+    private final int reloadSound;
+    private final int youKilledSound;
+    private final int respawnSound;
+    private final int gameOverSound;
+    private final int gameStartSound;
+    private final int youScoredSound;
 
     public SoundManager(Context context) {
         AudioAttributes audioAttributes = new AudioAttributes.Builder()
@@ -40,7 +39,6 @@ public class SoundManager {
         gameOverSound = soundPool.load(context, R.raw.game_over, 1);
         gameStartSound = soundPool.load(context, R.raw.game_start, 1);
         youScoredSound = soundPool.load(context, R.raw.you_scored, 1);
-
     }
 
     public void release() {

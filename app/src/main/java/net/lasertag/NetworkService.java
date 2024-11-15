@@ -9,7 +9,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.util.Log;
 
 import net.lasertag.model.EventMessage;
@@ -33,6 +35,8 @@ public class NetworkService extends Service {
 
     private Config config;
     private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(3);
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
     private DatagramSocket heartbeatSocket;
     private SoundManager soundManager;
 
@@ -44,6 +48,7 @@ public class NetworkService extends Service {
 
     private volatile Long lastPingTime = 0L;
     private volatile int currentState = -1;
+    private boolean firstEverMessage = true;
 
     private StatsMessage lastStatsMessage;
     private EventMessage lastEventMessage;
@@ -83,18 +88,12 @@ public class NetworkService extends Service {
         registerReceiver(activityResumedReceiver, new IntentFilter("ACTIVITY_PAUSED"), Context.RECEIVER_EXPORTED);
     }
 
-
     private void createNotificationChannel() {
-
-            NotificationChannel serviceChannel = new NotificationChannel(
-                    CHANNEL_ID,
-                    "Foreground Service Channel",
-                    NotificationManager.IMPORTANCE_DEFAULT
-            );
-            NotificationManager manager = getSystemService(NotificationManager.class);
-            if (manager != null) {
-                manager.createNotificationChannel(serviceChannel);
-            }
+        NotificationChannel serviceChannel = new NotificationChannel(CHANNEL_ID, "Foreground Service Channel", NotificationManager.IMPORTANCE_DEFAULT);
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        if (manager != null) {
+            manager.createNotificationChannel(serviceChannel);
+        }
     }
 
     @Override
@@ -131,10 +130,11 @@ public class NetworkService extends Service {
             evaluateCurrentState();
         }
         try {
-            byte[] message = new byte[] { UdpMessages.PING, config.getPlayerId(), 0 };
+            byte[] message = new byte[] { UdpMessages.PING, config.getPlayerId(), firstEverMessage ? (byte) 1 : (byte) 0 };
             var ip = config.getServerAddress() == null ? config.getBroadcastAddress() : config.getServerAddress();
             DatagramPacket packet = new DatagramPacket(message, 3, ip, SERVER_PORT);
             heartbeatSocket.send(packet);
+            firstEverMessage = false;
         } catch (Exception e) {
             Log.e(TAG, "Failed to send heartbeat", e);
         }
@@ -153,8 +153,8 @@ public class NetworkService extends Service {
                         Log.i(TAG, "Server IP discovered: " + packet.getAddress());
                         config.setServerAddress(packet.getAddress());
                     }
-                    handleEvent(message.getType(), message);
-                    sendUdpMessageToActivity(message);
+                    mainHandler.post(() -> sendUdpMessageToActivity(message));
+                    mainHandler.post(() -> handleEvent(message.getType(), message));
                     lastPingTime = System.currentTimeMillis();
                 }
             } catch (Exception e) {

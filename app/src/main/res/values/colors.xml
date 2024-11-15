@@ -14,5 +14,11 @@
     <color name="tableRowBackgroundYellow">#9D8E07</color>
     <color name="tableRowBackgroundMagenta">#492983</color>
     <color name="tableRowBackgroundCyan">#00838F</color>
+    <color name="nameTextRed">#D30000</color>
+    <color name="nameTextBlue">#003EF0</color>
+    <color name="nameTextGreen">#0CB600</color>
+    <color name="nameTextYellow">#ECC604</color>
+    <color name="nameTextMagenta">#7736EF</color>
+    <color name="nameTextCyan">#03C0D2</color>
 
 </resources>
