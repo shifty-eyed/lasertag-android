@@ -9,7 +9,7 @@ import java.net.InetAddress;
 
 public class Config {
 
-    public static final int DEFAULT_PLAYER_ID = 1;
+    public static final int DEFAULT_PLAYER_ID = 4;
 
     public static final String TAG = "Lasertag";
     public static final String CHANNEL_ID = "LasertagForegroundServiceChannel";

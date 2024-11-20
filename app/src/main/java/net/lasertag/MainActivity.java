@@ -48,13 +48,6 @@ import java.util.Objects;
 @SuppressLint({"SetTextI18n","InlinedApi","DefaultLocale"})
 public class MainActivity extends AppCompatActivity implements TextToSpeech.OnInitListener {
 
-    /*
-
-    - better sounds, game start and over
-    - fix bug with delayed leader announcement causing delayed table update
-
-    */
-
     private final BroadcastReceiver udpMessageReceiver = new BroadcastReceiver() {
 
         @Override
@@ -188,9 +181,13 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         toasterOn = true;
         showAnnouncementLayout(true);
         announcementText.setText(message);
-        new Handler().postDelayed(
-                () -> textToSpeech.speak(message, TextToSpeech.QUEUE_ADD, null, null), 1000);
+        new Handler().postDelayed(() -> speak(message), 1000);
         new Handler().postDelayed(this::onRefreshUIGameSate, delayMillis);
+    }
+
+    private void speak(String message) {
+        Log.i(TAG, "Speaking: " + message);
+        textToSpeech.speak(message, TextToSpeech.QUEUE_ADD, null, null);
     }
 
     private void onRefreshUIGameSate() {
@@ -225,17 +222,22 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
                 while (uhVariant == lastUhVariant) {
                     uhVariant = (int) (Math.random() * uhVariants.length);
                 }
-                textToSpeech.speak(uhVariants[uhVariant], TextToSpeech.QUEUE_ADD, null, null);
+                //speak(uhVariants[uhVariant]);
                 lastUhVariant = uhVariant;
             }
             case UdpMessages.RESPAWN -> showToasterMessage("Play!", 2000);
             case UdpMessages.YOU_KILLED -> showToasterMessage(otherName + " killed you.", 3000);
             case UdpMessages.YOU_SCORED -> showToasterMessage("You killed " + otherName, 2000);
             case UdpMessages.GAME_OVER -> {
-                if (message.getCounterpartPlayerId() == config.getPlayerId()) {
-                    showToasterMessage("You win!", 4000);
+                if (teamPlay) {
+                    var teamName = message.getCounterpartPlayerId() > 0 ? teamNames[message.getCounterpartPlayerId() - 1] : "No one";
+                    showToasterMessage("Game Over!\n" + teamName + " wins.", 4000);
                 } else {
-                    showToasterMessage("Game Over!\n" + (otherPlayer == null ? "No one" : otherPlayer.getName()) + " wins.", 4000);
+                    if (message.getCounterpartPlayerId() == config.getPlayerId()) {
+                        showToasterMessage("You win!", 4000);
+                    } else {
+                        showToasterMessage("Game Over!\n" + (otherPlayer == null ? "No one" : otherPlayer.getName()) + " wins.", 4000);
+                    }
                 }
             }
         }
@@ -248,9 +250,8 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
                 case STATE_GAME -> gameTime.setText(String.format("%02d:%02d", message.getMinutes(), message.getSeconds()));
                 case STATE_DEAD -> announcementText.setText(String.format("You are dead.\nRespawn in %d...", message.getSeconds()));
             }
-            if ((currentState == STATE_IDLE || currentState == STATE_DEAD)
-                    && message.getMinutes() == 0 && message.getSeconds() < 4 && message.getSeconds() > 0) {
-                textToSpeech.speak(String.valueOf(message.getSeconds()), TextToSpeech.QUEUE_ADD, null, null);
+            if (message.getMinutes() == 0 && message.getSeconds() < 10 && message.getSeconds() > 0) {
+                speak(String.valueOf(message.getSeconds()));
             }
         }
     }
@@ -276,7 +277,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
             var newLeaderId = countOfLeaders == 1 ? leaderTeam.getKey() : -1;
             if (lastLeader != newLeaderId) {
                 var message = (newLeaderId == -1 ? "Teams are tie!" : teamNames[newLeaderId - 1] + " team leads!");
-                new Handler().postDelayed(() -> textToSpeech.speak(message, TextToSpeech.QUEUE_ADD, null, null), toasterOn ? 2000 : 100);
+                new Handler().postDelayed(() -> speak(message), toasterOn ? 2000 : 100);
             }
             lastLeader = newLeaderId;
         } else {
@@ -288,7 +289,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
                         (newLeaderId == config.getPlayerId()
                                 ? "You are"
                                 : Objects.requireNonNull(getPlayerById(newLeaderId)).getName() + " is") + " the new leader!");
-                new Handler().postDelayed(() -> textToSpeech.speak(message, TextToSpeech.QUEUE_ADD, null, null), toasterOn ? 2000 : 100);
+                new Handler().postDelayed(() -> speak(message), toasterOn ? 2000 : 100);
             }
             lastLeader = newLeaderId;
         }
