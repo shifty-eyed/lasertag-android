@@ -27,6 +27,7 @@ data class EventMessage (
 data class StatsMessage (
     override val type: Byte,
     val isGameRunning: Boolean,
+    val isTeamPlay: Boolean,
     val numPlayers: Byte,
     val players: Array<Player>
 ) : UdpMessage(type) {

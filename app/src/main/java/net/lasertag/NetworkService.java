@@ -229,6 +229,7 @@ public class NetworkService extends Service {
             case UdpMessages.FULL_STATS -> {
                 var statsMessage = (StatsMessage) message;
                 isGameRunning = statsMessage.isGameRunning();
+                teamPlay = statsMessage.isTeamPlay();
                 Arrays.stream(statsMessage.getPlayers())
                         .filter(p -> p.getId() == config.getPlayerId())
                         .findFirst()

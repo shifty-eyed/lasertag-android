@@ -12,6 +12,7 @@ import android.graphics.Paint;
 import android.os.Bundle;
 import android.os.Handler;
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.Voice;
 import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
@@ -92,11 +93,13 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
     private TextToSpeech textToSpeech;
 
     private static final String[] uhVariants = new String[] {"uh!", "ouch!", "ah!", "oh!", "oi!"};
+    private static final String[] teamNames = new String[] {"Red", "Blue", "Green", "Yellow", "Purple", "Cyan"};
     private int lastUhVariant = 0;
     private volatile int currentState = -1;
     private volatile boolean teamPlay = false;
-    private volatile List<Player> players = Collections.emptyList();
+    private volatile Player[] players = new Player[0];
     private volatile boolean toasterOn = false;
+    private int lastLeader = -1;
 
     @Override
     public void onConfigurationChanged(@NonNull Configuration newConfig) {
@@ -216,6 +219,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         var otherPlayer = getPlayerById(message.getCounterpartPlayerId());
         var otherName = otherPlayer != null ? otherPlayer.getName() : "someone";
         switch (message.getType()) {
+            case UdpMessages.GAME_START -> lastLeader = -1;
             case UdpMessages.GOT_HIT -> {
                 var uhVariant = lastUhVariant;
                 while (uhVariant == lastUhVariant) {
@@ -261,28 +265,47 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         }//AckMessage ignored
     }
 
-    private void compateOldAndNewPlayersInfoAnnounceLeaderChange(Player[] newPlayers) {
-        if (players.size() != newPlayers.length) {
+    private void announceLeaderChange(Player[] newPlayers) {
+        if (players.length == 0) {
             return;
         }
-        var oldLeader = players.get(0);
-        var newLeader = newPlayers[0];
-        if (oldLeader.getId() != newLeader.getId() && newLeader.getScore() > 0) {
-            var message =  (newLeader.getScore() == oldLeader.getScore() ? "You are tie!" :
-                    (newLeader.getId() == config.getPlayerId() ? "You are" : newLeader.getName() + " is") + " the new leader!");
-            new Handler().postDelayed(() -> textToSpeech.speak(message, TextToSpeech.QUEUE_ADD, null, null), toasterOn ? 2000 : 100);
+        if (teamPlay) {
+            var teamScores = getTeamScores(players);
+            var leaderTeam = Collections.max(teamScores.entrySet(), Map.Entry.comparingByValue());
+            var countOfLeaders = (int) teamScores.values().stream().filter(s -> s.equals(leaderTeam.getValue())).count();
+            var newLeaderId = countOfLeaders == 1 ? leaderTeam.getKey() : -1;
+            if (lastLeader != newLeaderId) {
+                var message = (newLeaderId == -1 ? "Teams are tie!" : teamNames[newLeaderId - 1] + " team leads!");
+                new Handler().postDelayed(() -> textToSpeech.speak(message, TextToSpeech.QUEUE_ADD, null, null), toasterOn ? 2000 : 100);
+            }
+            lastLeader = newLeaderId;
+        } else {
+            var maxScore = newPlayers[0].getScore();
+            var countOfLeaders = (int) Arrays.stream(newPlayers).filter(p -> p.getScore() == maxScore).count();
+            var newLeaderId = countOfLeaders == 1 ? newPlayers[0].getId() : -1;
+            if (lastLeader != newLeaderId) {
+                var message = (newLeaderId == -1 ? "You are tie!" :
+                        (newLeaderId == config.getPlayerId()
+                                ? "You are"
+                                : Objects.requireNonNull(getPlayerById(newLeaderId)).getName() + " is") + " the new leader!");
+                new Handler().postDelayed(() -> textToSpeech.speak(message, TextToSpeech.QUEUE_ADD, null, null), toasterOn ? 2000 : 100);
+            }
+            lastLeader = newLeaderId;
         }
     }
 
+    private Map<Byte, Integer> getTeamScores(Player[] players) {
+        Map<Byte, Integer> teamScores = new HashMap<>();
+        for (Player player : players) {
+            teamScores.put(player.getTeamId(), teamScores.getOrDefault(player.getTeamId(), 0) + player.getScore());
+        }
+        return teamScores;
+    }
+
     private void updatePlayersInfo(StatsMessage message) {
-        compateOldAndNewPlayersInfoAnnounceLeaderChange(message.getPlayers());
-        players = Arrays.asList(message.getPlayers());
         playersTable.removeViews(1, Math.max(0, playersTable.getChildCount() - 1));
         teamScoresBar.removeAllViews();
-        Map<Byte, Integer> teamScores = new HashMap<>();
-
         for (Player player : message.getPlayers()) {
-            teamScores.put(player.getTeamId(), teamScores.getOrDefault(player.getTeamId(), 0) + player.getScore());
             if (player.getId() == config.getPlayerId()) {
                 playerName.setText(player.getName());
                 playerName.setBackgroundColor(ResourcesCompat.getColor(getResources(), config.getTeamColor(player.getTeamId(), true), null));
@@ -320,9 +343,8 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
             }
             playersTable.addView(row);
         }
-
         if (teamPlay) {
-            for (Map.Entry<Byte, Integer> e : teamScores.entrySet()) {
+            for (Map.Entry<Byte, Integer> e : getTeamScores(message.getPlayers()).entrySet()) {
                 TextView teamScore = new TextView(this);
                 teamScore.setTextColor(ResourcesCompat.getColor(getResources(), R.color.white, null));
                 teamScore.setPadding(16, 8, 8, 8);
@@ -333,6 +355,8 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
                 teamScoresBar.addView(teamScore);
             }
         }
+        announceLeaderChange(message.getPlayers());
+        players = message.getPlayers();
     }
 
     private void refreshBulletsBar(int bulletsLeft) {

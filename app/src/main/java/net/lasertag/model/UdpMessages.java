@@ -37,6 +37,7 @@ public class UdpMessages {
 
     private static StatsMessage parseFullStatsMessage(ByteBuffer buffer) {
         var isGameRunning = buffer.get() != 0;
+        var teamPlay = buffer.get() != 0;
         var playersCount = buffer.get();
         var players = new Player[playersCount];
         for (int i = 0; i < playersCount; i++) {
@@ -51,7 +52,7 @@ public class UdpMessages {
             players[i] = new Player(id, health, score, teamId, name);
         }
         Arrays.sort(players, (a, b) -> Integer.compare(b.getScore(), a.getScore()));
-        return new StatsMessage(FULL_STATS, isGameRunning, playersCount, players);
+        return new StatsMessage(FULL_STATS, isGameRunning, teamPlay, playersCount, players);
     }
 
     private static TimeMessage parseTimeMessage(byte type, ByteBuffer buffer) {
