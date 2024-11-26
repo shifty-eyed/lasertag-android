@@ -6,16 +6,20 @@ import android.content.Context;
 import android.content.SharedPreferences;
 
 import java.net.InetAddress;
+import java.util.UUID;
 
 public class Config {
 
-    public static final int DEFAULT_PLAYER_ID = 4;
+    public static final int DEFAULT_PLAYER_ID = 1;
 
     public static final String TAG = "Lasertag";
     public static final String CHANNEL_ID = "LasertagForegroundServiceChannel";
 
     private static final String PREFS_NAME = "LaserTagPrefs";
     private static final String PLAYER_ID_KEY = "player_id";
+    public static final String GUN_DEVICE_NAME = "LaserTagGun";
+    public static final String VEST_DEVICE_NAME = "LaserTagVest";
+    public static final UUID SERVICE_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
     public static final int STATE_IDLE = 0;
     public static final int STATE_GAME = 1;
@@ -24,8 +28,8 @@ public class Config {
 
     public static final int SERVER_PORT = 9878;
     public static final int LISTENING_PORT = 1234;
-    public static final long HEARTBEAT_INTERVAL = 1000;
-    public static final long HEARTBEAT_TIMEOUT = 3000;
+    public static final long HEARTBEAT_INTERVAL = 2000;
+    public static final long HEARTBEAT_TIMEOUT = 5000;
 
 
     private final byte playerId;

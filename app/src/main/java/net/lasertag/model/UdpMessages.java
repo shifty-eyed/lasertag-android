@@ -3,6 +3,7 @@ package net.lasertag.model;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.List;
 
 public class UdpMessages {
 
@@ -18,6 +19,12 @@ public class UdpMessages {
     public static final byte YOU_SCORED = 10;
     public static final byte FULL_STATS = 11;
     public static final byte GUN_NO_BULLETS = 12;
+
+    public static final byte DEVICE_GUN_SHOT = 2;
+    public static final byte DEVICE_GUN_RELOAD = 3;
+    public static final byte DEVICE_VEST_HIT = 4;
+    public static final byte DEVICE_PLAYER_STATE = 5;
+
     public static final byte GAME_TIMER = 101;
 
     public static UdpMessage fromBytes(byte[] bytes, int length) {
@@ -25,7 +32,7 @@ public class UdpMessages {
         buffer.order(java.nio.ByteOrder.LITTLE_ENDIAN);
         byte type = buffer.get();
         if (type == PING) {
-            return new AckMessage(PING);
+            return new PingMessage(PING);
         } else if (type == FULL_STATS) {
             return parseFullStatsMessage(buffer);
         } else if (type == GAME_TIMER) {
@@ -33,6 +40,11 @@ public class UdpMessages {
         } else {
             return parseEventMessage(type, buffer);
         }
+    }
+
+    //TODO: MessageFromDevice has different format from EventMessage need to refactor
+    public static MessageFromDevice parseMessageFromDevice(List<Byte> bytes) {
+        return new MessageFromDevice(bytes.get(0), bytes.get(1));
     }
 
     private static StatsMessage parseFullStatsMessage(ByteBuffer buffer) {

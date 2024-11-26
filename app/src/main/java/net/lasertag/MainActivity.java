@@ -2,11 +2,14 @@ package net.lasertag;
 
 import static net.lasertag.Config.*;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Paint;
 import android.os.Bundle;
@@ -25,10 +28,12 @@ import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.constraintlayout.widget.ConstraintLayout;
+import androidx.core.app.ActivityCompat;
 import androidx.core.content.res.ResourcesCompat;
 
 import android.view.Window;
 import android.view.WindowManager;
+import android.widget.Toast;
 
 import net.lasertag.model.EventMessage;
 import net.lasertag.model.Player;
@@ -47,6 +52,15 @@ import java.util.Objects;
 
 @SuppressLint({"SetTextI18n","InlinedApi","DefaultLocale"})
 public class MainActivity extends AppCompatActivity implements TextToSpeech.OnInitListener {
+
+    public static final String[] REQUIRED_PERMISSIONS = new String[]{
+            //android.Manifest.permission.BLUETOOTH_CONNECT,
+            //android.Manifest.permission.BLUETOOTH_SCAN,
+            android.Manifest.permission.BLUETOOTH,
+            android.Manifest.permission.BLUETOOTH_ADMIN,
+            android.Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+    };
 
     private final BroadcastReceiver udpMessageReceiver = new BroadcastReceiver() {
 
@@ -103,6 +117,14 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Log.i(TAG, "onCreate");
+        if (allPermissionsGranted()) {
+            startService(new Intent(this, NetworkService.class));
+            registerReceiver(udpMessageReceiver, new IntentFilter("UDP_MESSAGE_RECEIVED"), Context.RECEIVER_EXPORTED);
+            registerReceiver(udpMessageReceiver, new IntentFilter("CURRENT_STATE"), Context.RECEIVER_EXPORTED);
+        } else {
+            requestPermissions();
+        }
+
         config = new Config(this);
         textToSpeech = new TextToSpeech(this, this);
 
@@ -120,11 +142,38 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         bulletsBar = findViewById(R.id.bullets_bar);
         teamScoresBar = findViewById(R.id.team_scores);
 
-        startService(new Intent(this, NetworkService.class));
-        registerReceiver(udpMessageReceiver, new IntentFilter("UDP_MESSAGE_RECEIVED"), Context.RECEIVER_EXPORTED);
-        registerReceiver(udpMessageReceiver, new IntentFilter("CURRENT_STATE"), Context.RECEIVER_EXPORTED);
         currentState = STATE_OFFLINE;
         onRefreshUIGameSate();
+    }
+
+    private boolean allPermissionsGranted() {
+        for (String permission : REQUIRED_PERMISSIONS) {
+            if (ActivityCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+                return true;
+            }
+        }
+        return true;
+    }
+
+    private void requestPermissions() {
+        ActivityCompat.requestPermissions(
+                this,
+                REQUIRED_PERMISSIONS,
+                1
+        );
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 1) {
+            if (allPermissionsGranted()) {
+                Intent serviceIntent = new Intent(this, NetworkService.class);
+                startService(serviceIntent);
+            } else {
+                Toast.makeText(this, "Permissions not granted. Cannot start the service.", Toast.LENGTH_SHORT).show();
+            }
+        }
     }
 
     @Override

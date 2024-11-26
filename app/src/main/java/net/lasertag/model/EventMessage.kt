@@ -4,10 +4,14 @@ import java.io.Serializable
 
 abstract class UdpMessage(
     open val type: Byte
-): Serializable
+): Serializable {
+    open fun getBytes(): ByteArray {
+        return byteArrayOf(type)
+    }
+}
 
-data class AckMessage (
-    override val type: Byte
+data class PingMessage (
+    override val type: Byte = UdpMessages.PING
 ): UdpMessage(type)
 
 data class TimeMessage (
@@ -23,6 +27,23 @@ data class EventMessage (
     val score: Byte,
     val bulletsLeft: Byte
 ): UdpMessage(type)
+
+data class MessageFromDevice (
+    override val type: Byte,
+    val counterpartPlayerId: Byte
+): UdpMessage(type)
+
+data class MessageToDevice (
+    override val type: Byte,
+    val playerId: Byte,
+    val playerTeam: Byte,
+    val playerState: Byte,
+    val bulletsLeft: Byte
+): UdpMessage(type) {
+    override fun getBytes(): ByteArray {
+        return byteArrayOf(type, playerId, playerTeam, playerState, bulletsLeft)
+    }
+}
 
 data class StatsMessage (
     override val type: Byte,
