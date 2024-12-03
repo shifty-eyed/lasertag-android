@@ -19,15 +19,12 @@ public class UdpMessages {
     public static final byte YOU_SCORED = 10;
     public static final byte FULL_STATS = 11;
     public static final byte GUN_NO_BULLETS = 12;
-
-    public static final byte DEVICE_GUN_SHOT = 2;
-    public static final byte DEVICE_GUN_RELOAD = 3;
-    public static final byte DEVICE_VEST_HIT = 4;
-    public static final byte DEVICE_PLAYER_STATE = 5;
+    public static final byte DEVICE_PLAYER_STATE = 13;
 
     public static final byte GAME_TIMER = 101;
+    public static final byte LOST_CONNECTION = 102;
 
-    public static UdpMessage fromBytes(byte[] bytes, int length) {
+    public static WirelessMessage fromBytes(byte[] bytes, int length) {
         ByteBuffer buffer = ByteBuffer.wrap(bytes, 0, length);
         buffer.order(java.nio.ByteOrder.LITTLE_ENDIAN);
         byte type = buffer.get();
@@ -38,16 +35,21 @@ public class UdpMessages {
         } else if (type == GAME_TIMER) {
             return parseTimeMessage(type, buffer);
         } else {
-            return parseEventMessage(type, buffer);
+            return parseEventFromServer(type, buffer);
         }
     }
 
-    //TODO: MessageFromDevice has different format from EventMessage need to refactor
-    public static MessageFromDevice parseMessageFromDevice(List<Byte> bytes) {
-        return new MessageFromDevice(bytes.get(0), bytes.get(1));
+
+    private static EventMessageIn parseEventFromServer(byte type, ByteBuffer buffer) {
+        var otherPlayerId = buffer.get();
+        return new EventMessageIn(type, otherPlayerId);
     }
 
-    private static StatsMessage parseFullStatsMessage(ByteBuffer buffer) {
+    public static EventMessageIn parseMessageFromDevice(List<Byte> bytes) {
+        return new EventMessageIn(bytes.get(0), bytes.get(1));
+    }
+
+    private static StatsMessageIn parseFullStatsMessage(ByteBuffer buffer) {
         var isGameRunning = buffer.get() != 0;
         var teamPlay = buffer.get() != 0;
         var playersCount = buffer.get();
@@ -57,28 +59,24 @@ public class UdpMessages {
             var health = buffer.get();
             var score = buffer.get();
             var teamId = buffer.get();
+            var damage = buffer.get();
+            var maxHealth = buffer.get();
+            var maxBullets = buffer.get();
+            var bulletsLeft = buffer.get();
             var nameLength = buffer.get();
             var nameBytes = new byte[nameLength];
             buffer.get(nameBytes, 0, nameLength);
             var name = new String(nameBytes);
-            players[i] = new Player(id, health, score, teamId, name);
+            players[i] = new Player(id, health, score, teamId, damage, maxHealth, maxBullets, bulletsLeft, name);
         }
         Arrays.sort(players, (a, b) -> Integer.compare(b.getScore(), a.getScore()));
-        return new StatsMessage(FULL_STATS, isGameRunning, teamPlay, playersCount, players);
+        return new StatsMessageIn(FULL_STATS, isGameRunning, teamPlay, playersCount, players);
     }
 
     private static TimeMessage parseTimeMessage(byte type, ByteBuffer buffer) {
         var minutes = buffer.get();
         var seconds = buffer.get();
         return new TimeMessage(type, minutes, seconds);
-    }
-
-    private static EventMessage parseEventMessage(byte type, ByteBuffer buffer) {
-        var counterpartPlayerId = buffer.get();
-        var health = buffer.get();
-        var score = buffer.get();
-        var bulletsLeft = buffer.get();
-        return new EventMessage(type, counterpartPlayerId, health, score, bulletsLeft);
     }
 
 

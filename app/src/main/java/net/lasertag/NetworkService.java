@@ -10,60 +10,51 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.pm.PackageManager;
-import android.os.Handler;
 import android.os.IBinder;
-import android.os.Looper;
 import android.util.Log;
 
-import net.lasertag.model.EventMessage;
+import net.lasertag.communication.BluetoothClient;
+import net.lasertag.communication.UdpClient;
+import net.lasertag.model.EventMessageIn;
+import net.lasertag.model.WirelessMessage;
 
 import static net.lasertag.Config.*;
-import static net.lasertag.MainActivity.REQUIRED_PERMISSIONS;
 
-import androidx.core.app.ActivityCompat;
-
-import net.lasertag.model.MessageFromDevice;
+import net.lasertag.model.EventMessageToServer;
 import net.lasertag.model.MessageToDevice;
-import net.lasertag.model.StatsMessage;
-import net.lasertag.model.UdpMessage;
+import net.lasertag.model.Player;
+import net.lasertag.model.StatsMessageIn;
+import net.lasertag.model.TimeMessage;
 import net.lasertag.model.UdpMessages;
 
-import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @SuppressLint("MissingPermission")
-public class NetworkService extends Service implements BluetoothMessageHandler {
+public class NetworkService extends Service {
 
     private Config config;
     private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(3);
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
-
-    private DatagramSocket serverSocket;
     private SoundManager soundManager;
 
     private volatile boolean isActive = true;
     private volatile boolean isGameRunning = false;
-    private volatile boolean isPlayerDead = false;
-    private volatile boolean isOnline = false;
     private volatile boolean teamPlay = false;
 
-    private volatile Long lastPingTime = 0L;
+    private final AtomicInteger gameTimerSeconds = new AtomicInteger(0);
     private volatile int currentState = -1;
-    private volatile byte playerTeam = 0;
-    private volatile byte bulletsLeft = 0;
-    private boolean firstEverMessage = true;
+    private final Player thisPlayer = new Player(config.getPlayerId());
+    private Player[] allPlayersSnapshot = new Player[0];
 
-    private StatsMessage lastStatsMessage;
-    private EventMessage lastEventMessage;
+    private StatsMessageIn lastStatsMessage;
+    private EventMessageIn lastReceivedEvent;
 
-    private BluetoothComm gunComm;
-    private BluetoothComm vestComm;
+    private BluetoothClient gunComm;
+    private BluetoothClient vestComm;
+    private UdpClient udpClient;
 
     private final BroadcastReceiver activityResumedReceiver = new BroadcastReceiver() {
         @Override
@@ -73,10 +64,10 @@ public class NetworkService extends Service implements BluetoothMessageHandler {
                 case "ACTIVITY_RESUMED" -> {
                     isActive = true;
                     sendCurrentStateToActivity();
-                    sendUdpMessageToActivity(lastStatsMessage);
-                    sendUdpMessageToActivity(lastEventMessage);
+                    sendMessageToActivity(lastStatsMessage, INTERCOM_GAME_MESSAGE);
+                    sendMessageToActivity(lastReceivedEvent, INTERCOM_GAME_MESSAGE);
                     lastStatsMessage = null;
-                    lastEventMessage = null;
+                    lastReceivedEvent = null;
                 }
             }
         }
@@ -87,7 +78,6 @@ public class NetworkService extends Service implements BluetoothMessageHandler {
         super.onCreate();
         config = new Config(this);
         soundManager = new SoundManager(this);
-        initBluetooth();
 
         createNotificationChannel();
         Notification notification = new Notification.Builder(this, CHANNEL_ID)
@@ -99,37 +89,25 @@ public class NetworkService extends Service implements BluetoothMessageHandler {
         startForeground(1, notification);
         registerReceiver(activityResumedReceiver, new IntentFilter("ACTIVITY_RESUMED"), Context.RECEIVER_EXPORTED);
         registerReceiver(activityResumedReceiver, new IntentFilter("ACTIVITY_PAUSED"), Context.RECEIVER_EXPORTED);
-    }
 
-    private boolean allPermissionsGranted() {
-        for (String permission : REQUIRED_PERMISSIONS) {
-            if (ActivityCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
-                return true;
-            }
-        }
-        return true;
-    }
+        try {
+            var bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
 
+            gunComm = new BluetoothClient(Config.GUN_DEVICE_NAME, bluetoothAdapter, this::handleEventFromDevice);
+            gunComm.start();
 
-    private void initBluetooth() {
-        if (!allPermissionsGranted()) {
+            vestComm = new BluetoothClient(Config.VEST_DEVICE_NAME, bluetoothAdapter, this::handleEventFromDevice);
+            vestComm.start();
+
+            udpClient = new UdpClient(config, this::handleEventFromServer);
+            udpClient.start();
+
+            executorService.scheduleWithFixedDelay(this::timerTick, 0, 1, java.util.concurrent.TimeUnit.SECONDS);
+            evaluateCurrentState();
+        } catch (Exception e) {
+            Log.e(TAG, "Service failed to start", e);
             stopSelf();
-            return;
         }
-        var bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        gunComm = new BluetoothComm(Config.GUN_DEVICE_NAME, bluetoothAdapter, this);
-        gunComm.start();
-        vestComm = new BluetoothComm(Config.VEST_DEVICE_NAME, bluetoothAdapter, this);
-        vestComm.start();
-    }
-
-    @Override
-    public void handleBluetoothMessage(MessageFromDevice message) throws IOException {
-        var ip = config.getServerAddress() == null ? config.getBroadcastAddress() : config.getServerAddress();
-        byte[] raw = new byte[] { message.getType(), config.getPlayerId(), message.getCounterpartPlayerId() };
-        DatagramPacket packet = new DatagramPacket(raw, 3, ip, SERVER_PORT);
-        serverSocket.send(packet);
-        Log.i(TAG, "Sent to server: " + message);
     }
 
     private void createNotificationChannel() {
@@ -150,82 +128,34 @@ public class NetworkService extends Service implements BluetoothMessageHandler {
             gunComm.stop();
             vestComm.stop();
         }
-        if (serverSocket != null && !serverSocket.isClosed()) {
-            serverSocket.close();
+        if (udpClient != null) {
+            udpClient.stop();
         }
         Log.i(TAG, "Service destroyed");
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        Log.i(TAG, "Service Starting");
-        try {
-            if (gunComm == null || vestComm == null) {
-                initBluetooth();
-            }
-            if (gunComm != null && vestComm != null) {
-                gunComm.start();
-                vestComm.start();
-            }
-            serverSocket = new DatagramSocket();
-            executorService.scheduleWithFixedDelay(this::heartbeat, 0, HEARTBEAT_INTERVAL, java.util.concurrent.TimeUnit.MILLISECONDS);
-            startUDPListener();
-            evaluateCurrentState();
-        } catch (Exception e) {
-            Log.e(TAG, "Service failed to start", e);
-            stopSelf();
-        }
         return START_STICKY;
     }
 
-    private void heartbeat() {
-        if (System.currentTimeMillis() - lastPingTime > HEARTBEAT_TIMEOUT) {
-            Log.i(TAG, "LostConnection");
-            isOnline = false;
-            evaluateCurrentState();
+    private void timerTick() {
+        if (gameTimerSeconds.decrementAndGet() < 0) {
+            gameTimerSeconds.set(0);
         }
-        try {
-            byte[] message = new byte[] { UdpMessages.PING, config.getPlayerId(), firstEverMessage ? (byte) 1 : (byte) 0 };
-            var ip = config.getServerAddress() == null ? config.getBroadcastAddress() : config.getServerAddress();
-            DatagramPacket packet = new DatagramPacket(message, 3, ip, SERVER_PORT);
-            serverSocket.send(packet);
-            firstEverMessage = false;
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to send heartbeat", e);
-        }
-    }
-
-    private void startUDPListener() {
-        executorService.execute(() -> {
-            try (var socket = new DatagramSocket(LISTENING_PORT)) {
-                var buffer = new byte[512];
-                Log.i(TAG, "Listening on socket: " + socket.getLocalSocketAddress());
-                while (true) {
-                    var packet = new DatagramPacket(buffer, buffer.length);
-                    socket.receive(packet);
-                    var message = UdpMessages.fromBytes(packet.getData(), packet.getLength());
-                    if (config.getServerAddress() == null) {
-                        Log.i(TAG, "Server IP discovered: " + packet.getAddress());
-                        config.setServerAddress(packet.getAddress());
-                    }
-                    mainHandler.post(() -> sendUdpMessageToActivity(message));
-                    mainHandler.post(() -> handleEventFromServer(message.getType(), message));
-                    lastPingTime = System.currentTimeMillis();
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "Failed to receive UDP message", e);
-            }
-        });
+        var minutes = (byte) (gameTimerSeconds.get() / 60);
+        var seconds = (byte) (gameTimerSeconds.get() % 60);
+        sendMessageToActivity(new TimeMessage(UdpMessages.GAME_TIMER, minutes, seconds), INTERCOM_TIME_TICK);
     }
 
     private void evaluateCurrentState() {
         var newState = currentState;
-        if (!isOnline) {
+        if (!udpClient.isOnline()) {
             newState = STATE_OFFLINE;
         } else if (!isGameRunning) {
             newState = STATE_IDLE;
         } else {
-            newState = isPlayerDead ? STATE_DEAD : STATE_GAME;
+            newState = !thisPlayer.isAlive() ? STATE_DEAD : STATE_GAME;
         }
         if (newState != currentState) {
             currentState = newState;
@@ -242,73 +172,110 @@ public class NetworkService extends Service implements BluetoothMessageHandler {
     }
 
     private void sendCurrentStateToDevice() {
-        var message = new MessageToDevice(UdpMessages.DEVICE_PLAYER_STATE, config.getPlayerId(), playerTeam, (byte) currentState, bulletsLeft);
+        var message = new MessageToDevice(
+                UdpMessages.DEVICE_PLAYER_STATE,
+                config.getPlayerId(),
+                (byte)thisPlayer.getTeamId(),
+                (byte)currentState,
+                (byte)thisPlayer.getBulletsLeft());
         gunComm.sendMessageToDevice(message);
         vestComm.sendMessageToDevice(message);
     }
 
-    private void sendUdpMessageToActivity(UdpMessage message) {
-        if (message == null) {
+    private void sendMessageToActivity(WirelessMessage message, String action) {
+        if (message == null || message.getType() == UdpMessages.PING) {
             return;
         }
         if (isActive) {
-            Intent broadcastIntent = new Intent("UDP_MESSAGE_RECEIVED");
+            Intent broadcastIntent = new Intent(action);
             broadcastIntent.putExtra("message", message);
+            broadcastIntent.putExtra("player", thisPlayer);
             sendBroadcast(broadcastIntent);
-        } else if (message instanceof StatsMessage) {
-            lastStatsMessage = (StatsMessage) message;
-        } else if (message instanceof EventMessage) {
-            lastEventMessage = (EventMessage) message;
+        } else if (message instanceof StatsMessageIn) {
+            lastStatsMessage = (StatsMessageIn) message;
+        } else if (message instanceof EventMessageIn) {
+            lastReceivedEvent = (EventMessageIn) message;
         }
     }
 
-    private void handleEventFromServer(byte eventType, UdpMessage message) {
-        isOnline = true;
-        if (message instanceof EventMessage eventMessage) {
-            bulletsLeft = eventMessage.getBulletsLeft();
-        }
-        switch (eventType) {
-            case UdpMessages.GUN_SHOT -> soundManager.playGunShot();
-            case UdpMessages.GUN_RELOAD -> soundManager.playReload();
+    private void handleEventFromServer(WirelessMessage message) {
+        switch (message.getType()) {
             case UdpMessages.YOU_HIT_SOMEONE -> soundManager.playYouHitSomeone();
-            case UdpMessages.GOT_HIT -> soundManager.playGotHit();
             case UdpMessages.RESPAWN -> {
                 soundManager.playRespawn();
                 isGameRunning = true;
-                isPlayerDead = false;
+                thisPlayer.respawn();
             }
             case UdpMessages.GAME_OVER -> {
                 soundManager.playGameOver();
                 isGameRunning = false;
             }
-            case UdpMessages.GAME_START -> {
-                soundManager.playGameStart();
-                teamPlay = ((EventMessage) message).getCounterpartPlayerId() != 0;
+            case UdpMessages.GAME_START -> soundManager.playGameStart();
+            case UdpMessages.YOU_SCORED -> {
+                soundManager.playYouScored();
+                thisPlayer.setScore(thisPlayer.getScore() + 1);
             }
-            case UdpMessages.YOU_KILLED -> {
-                soundManager.playYouKilled();
-                isPlayerDead = true;
-            }
-            case UdpMessages.YOU_SCORED -> soundManager.playYouScored();
-            case UdpMessages.GUN_NO_BULLETS -> soundManager.playNoBullets();
             case UdpMessages.FULL_STATS -> {
-                var statsMessage = (StatsMessage) message;
+                var statsMessage = (StatsMessageIn) message;
                 isGameRunning = statsMessage.isGameRunning();
                 teamPlay = statsMessage.isTeamPlay();
-                Arrays.stream(statsMessage.getPlayers())
+                allPlayersSnapshot = statsMessage.getPlayers();
+                Arrays.stream(allPlayersSnapshot)
                         .filter(p -> p.getId() == config.getPlayerId())
                         .findFirst()
-                        .ifPresent(p -> {
-                            playerTeam = p.getTeamId();
-                            isPlayerDead = p.getHealth() <= 0;
-                        });
+                        .ifPresent(thisPlayer::copyFrom);
                 sendCurrentStateToDevice();
             }
-            case UdpMessages.GAME_TIMER -> {}
+            case UdpMessages.GAME_TIMER -> {
+                var timeMessage = (TimeMessage) message;
+                gameTimerSeconds.set(timeMessage.getMinutes() * 60 + timeMessage.getSeconds());
+                sendMessageToActivity(message, INTERCOM_TIME_TICK);
+            }
         }
-        if (eventType != UdpMessages.GAME_TIMER) {
+        sendMessageToActivity(message, INTERCOM_GAME_MESSAGE);
+        if (message.getType() != UdpMessages.GAME_TIMER) {
             evaluateCurrentState();
         }
+    }
+
+    public void handleEventFromDevice(WirelessMessage message) {
+        var type = message.getType();
+        var otherPlayerId = ((EventMessageIn)message).getPayload();
+        switch (message.getType()) {
+            case UdpMessages.GUN_SHOT -> {
+                soundManager.playGunShot();
+                thisPlayer.decreaseBullets();
+            }
+            case UdpMessages.GUN_RELOAD -> {
+                soundManager.playReload();
+                thisPlayer.setBulletsLeft(thisPlayer.getMaxBullets());
+            }
+            case UdpMessages.GOT_HIT -> {
+                var otherPlayer = getPlayerById(otherPlayerId);
+                thisPlayer.decreaseHealth(otherPlayer.getDamage());
+                if (thisPlayer.isAlive()) {
+                    soundManager.playGotHit();
+                } else {
+                    soundManager.playYouKilled();
+                    type = UdpMessages.YOU_KILLED;
+                }
+            }
+            case UdpMessages.GUN_NO_BULLETS -> soundManager.playNoBullets();
+        }
+        udpClient.sendEventToServer(new EventMessageToServer(type,
+                config.getPlayerId(),
+                otherPlayerId,
+                (byte) thisPlayer.getHealth(),
+                (byte) thisPlayer.getScore(),
+                (byte) thisPlayer.getTeamId()));
+        sendMessageToActivity(new EventMessageIn(type, otherPlayerId), INTERCOM_GAME_MESSAGE);
+    }
+
+    private Player getPlayerById(int id) {
+        return Arrays.stream(allPlayersSnapshot)
+                .filter(p -> p.getId() == id)
+                .findFirst()
+                .orElse(null);
     }
 
     @Override

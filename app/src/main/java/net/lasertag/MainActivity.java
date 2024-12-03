@@ -2,9 +2,7 @@ package net.lasertag;
 
 import static net.lasertag.Config.*;
 
-import android.Manifest;
 import android.annotation.SuppressLint;
-import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -15,7 +13,6 @@ import android.graphics.Paint;
 import android.os.Bundle;
 import android.os.Handler;
 import android.speech.tts.TextToSpeech;
-import android.speech.tts.Voice;
 import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
@@ -35,17 +32,16 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Toast;
 
-import net.lasertag.model.EventMessage;
+import net.lasertag.model.EventMessageIn;
+import net.lasertag.model.WirelessMessage;
 import net.lasertag.model.Player;
-import net.lasertag.model.StatsMessage;
+import net.lasertag.model.StatsMessageIn;
 import net.lasertag.model.TimeMessage;
-import net.lasertag.model.UdpMessage;
 import net.lasertag.model.UdpMessages;
 
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -53,13 +49,12 @@ import java.util.Objects;
 @SuppressLint({"SetTextI18n","InlinedApi","DefaultLocale"})
 public class MainActivity extends AppCompatActivity implements TextToSpeech.OnInitListener {
 
+    //TODO: init based on android version
     public static final String[] REQUIRED_PERMISSIONS = new String[]{
             //android.Manifest.permission.BLUETOOTH_CONNECT,
             //android.Manifest.permission.BLUETOOTH_SCAN,
             android.Manifest.permission.BLUETOOTH,
-            android.Manifest.permission.BLUETOOTH_ADMIN,
-            android.Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION,
+            android.Manifest.permission.BLUETOOTH_ADMIN
     };
 
     private final BroadcastReceiver udpMessageReceiver = new BroadcastReceiver() {
@@ -67,7 +62,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         @Override
         public synchronized void onReceive(Context context, Intent intent) {
             switch (Objects.requireNonNull(intent.getAction())) {
-                case "CURRENT_STATE" -> {
+                case INTERCOM_GAME_STATE -> {
                     var state = intent.getIntExtra("state", -1);
                     teamPlay = intent.getBooleanExtra("teamPlay", false);
                     if (state != currentState) {
@@ -77,10 +72,12 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
                         }
                     }
                 }
-                case "UDP_MESSAGE_RECEIVED" -> {
-                    UdpMessage message = (UdpMessage) intent.getSerializableExtra("message");
-                    handleIncomingMessage(message);
-                }
+                case INTERCOM_TIME_TICK ->
+                        handleTime((TimeMessage) intent.getSerializableExtra("message"));
+                case INTERCOM_GAME_MESSAGE ->
+                        handleIncomingMessage((WirelessMessage) intent.getSerializableExtra("message"),
+                                (Player) Objects.requireNonNull(intent.getSerializableExtra("player")));
+
             }
         }
     };
@@ -99,9 +96,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
 
     private TextToSpeech textToSpeech;
 
-    private static final String[] uhVariants = new String[] {"uh!", "ouch!", "ah!", "oh!", "oi!"};
     private static final String[] teamNames = new String[] {"Red", "Blue", "Green", "Yellow", "Purple", "Cyan"};
-    private int lastUhVariant = 0;
     private volatile int currentState = -1;
     private volatile boolean teamPlay = false;
     private volatile Player[] players = new Player[0];
@@ -119,8 +114,9 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         Log.i(TAG, "onCreate");
         if (allPermissionsGranted()) {
             startService(new Intent(this, NetworkService.class));
-            registerReceiver(udpMessageReceiver, new IntentFilter("UDP_MESSAGE_RECEIVED"), Context.RECEIVER_EXPORTED);
-            registerReceiver(udpMessageReceiver, new IntentFilter("CURRENT_STATE"), Context.RECEIVER_EXPORTED);
+            registerReceiver(udpMessageReceiver, new IntentFilter(INTERCOM_GAME_MESSAGE), Context.RECEIVER_EXPORTED);
+            registerReceiver(udpMessageReceiver, new IntentFilter(INTERCOM_TIME_TICK), Context.RECEIVER_EXPORTED);
+            registerReceiver(udpMessageReceiver, new IntentFilter(INTERCOM_GAME_STATE), Context.RECEIVER_EXPORTED);
         } else {
             requestPermissions();
         }
@@ -258,31 +254,24 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         }
     }
 
-    private void handleEvent(EventMessage message) {
-        playerHealth.setText(String.valueOf(message.getHealth()));
-        playerScore.setText(String.valueOf(message.getScore()));
-        refreshBulletsBar(message.getBulletsLeft());
-        var otherPlayer = getPlayerById(message.getCounterpartPlayerId());
+    private void handleEvent(EventMessageIn message) {
+        var otherPlayer = getPlayerById(message.getPayload());
         var otherName = otherPlayer != null ? otherPlayer.getName() : "someone";
         switch (message.getType()) {
             case UdpMessages.GAME_START -> lastLeader = -1;
             case UdpMessages.GOT_HIT -> {
-                var uhVariant = lastUhVariant;
-                while (uhVariant == lastUhVariant) {
-                    uhVariant = (int) (Math.random() * uhVariants.length);
-                }
-                //speak(uhVariants[uhVariant]);
-                lastUhVariant = uhVariant;
+               //maybe make screen flash red or show quick toaster with otherName
             }
             case UdpMessages.RESPAWN -> showToasterMessage("Play!", 2000);
             case UdpMessages.YOU_KILLED -> showToasterMessage(otherName + " killed you.", 3000);
             case UdpMessages.YOU_SCORED -> showToasterMessage("You killed " + otherName, 2000);
             case UdpMessages.GAME_OVER -> {
+
                 if (teamPlay) {
-                    var teamName = message.getCounterpartPlayerId() > 0 ? teamNames[message.getCounterpartPlayerId() - 1] : "No one";
+                    var teamName = otherPlayer != null && otherPlayer.getId() > 0 ? teamNames[otherPlayer.getId() - 1] : "No one";
                     showToasterMessage("Game Over!\n" + teamName + " wins.", 4000);
                 } else {
-                    if (message.getCounterpartPlayerId() == config.getPlayerId()) {
+                    if (otherPlayer != null && otherPlayer.getId() == config.getPlayerId()) {
                         showToasterMessage("You win!", 4000);
                     } else {
                         showToasterMessage("Game Over!\n" + (otherPlayer == null ? "No one" : otherPlayer.getName()) + " wins.", 4000);
@@ -305,14 +294,21 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         }
     }
 
-    private void handleIncomingMessage(UdpMessage message) {
-        if (message instanceof StatsMessage) {
-            runOnUiThread(() -> updatePlayersInfo((StatsMessage) message));
-        } else if (message instanceof EventMessage) {
-            handleEvent((EventMessage) message);
-        } else if (message instanceof TimeMessage) {
-            handleTime((TimeMessage) message);
-        }//AckMessage ignored
+    private void handleIncomingMessage(WirelessMessage message, Player myPlayerInfo) {
+        runOnUiThread(() -> updatePlayerInfo(myPlayerInfo));
+
+        if (message instanceof StatsMessageIn) {
+            runOnUiThread(() -> updatePlayersTable((StatsMessageIn) message));
+        } else if (message instanceof EventMessageIn) {
+            handleEvent((EventMessageIn) message);
+        }
+    }
+    private void updatePlayerInfo(Player player) {
+        playerName.setText(player.getName());
+        playerName.setBackgroundColor(ResourcesCompat.getColor(getResources(), config.getTeamColor(player.getTeamId(), true), null));
+        playerHealth.setText(String.valueOf(player.getHealth()));
+        playerScore.setText(String.valueOf(player.getScore()));
+        refreshBulletsBar(player.getBulletsLeft());
     }
 
     private void announceLeaderChange(Player[] newPlayers) {
@@ -344,24 +340,18 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         }
     }
 
-    private Map<Byte, Integer> getTeamScores(Player[] players) {
-        Map<Byte, Integer> teamScores = new HashMap<>();
+    private Map<Integer, Integer> getTeamScores(Player[] players) {
+        Map<Integer, Integer> teamScores = new HashMap<>();
         for (Player player : players) {
             teamScores.put(player.getTeamId(), teamScores.getOrDefault(player.getTeamId(), 0) + player.getScore());
         }
         return teamScores;
     }
 
-    private void updatePlayersInfo(StatsMessage message) {
+    private void updatePlayersTable(StatsMessageIn message) {
         playersTable.removeViews(1, Math.max(0, playersTable.getChildCount() - 1));
         teamScoresBar.removeAllViews();
         for (Player player : message.getPlayers()) {
-            if (player.getId() == config.getPlayerId()) {
-                playerName.setText(player.getName());
-                playerName.setBackgroundColor(ResourcesCompat.getColor(getResources(), config.getTeamColor(player.getTeamId(), true), null));
-                playerHealth.setText(String.valueOf(player.getHealth()));
-                playerScore.setText(String.valueOf(player.getScore()));
-            }
             TableRow row = new TableRow(this);
             row.setPadding(8, 8, 8, 8);
             row.setBackground(ResourcesCompat.getDrawable(getResources(), R.drawable.table_row_border, null));
@@ -394,7 +384,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
             playersTable.addView(row);
         }
         if (teamPlay) {
-            for (Map.Entry<Byte, Integer> e : getTeamScores(message.getPlayers()).entrySet()) {
+            for (Map.Entry<Integer, Integer> e : getTeamScores(message.getPlayers()).entrySet()) {
                 TextView teamScore = new TextView(this);
                 teamScore.setTextColor(ResourcesCompat.getColor(getResources(), R.color.white, null));
                 teamScore.setPadding(16, 8, 8, 8);
@@ -420,7 +410,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         }
     }
 
-    private Player getPlayerById(byte id) {
+    private Player getPlayerById(int id) {
         for (Player player : players) {
             if (player.getId() == id) {
                 return player;

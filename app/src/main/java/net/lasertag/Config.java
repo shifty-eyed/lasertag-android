@@ -21,6 +21,10 @@ public class Config {
     public static final String VEST_DEVICE_NAME = "LaserTagVest";
     public static final UUID SERVICE_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
+    public static final String INTERCOM_GAME_MESSAGE = "UDP_MESSAGE_RECEIVED";
+    public static final String INTERCOM_TIME_TICK = "TIME_TICK_RECEIVED";
+    public static final String INTERCOM_GAME_STATE = "CURRENT_STATE";
+
     public static final int STATE_IDLE = 0;
     public static final int STATE_GAME = 1;
     public static final int STATE_DEAD = 2;

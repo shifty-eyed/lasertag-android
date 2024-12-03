@@ -1,4 +1,4 @@
-package net.lasertag;
+package net.lasertag.communication;
 
 import static net.lasertag.Config.SERVICE_UUID;
 import static net.lasertag.Config.TAG;
@@ -10,7 +10,7 @@ import android.bluetooth.BluetoothSocket;
 import android.util.Log;
 
 import net.lasertag.model.PingMessage;
-import net.lasertag.model.UdpMessage;
+import net.lasertag.model.WirelessMessage;
 import net.lasertag.model.UdpMessages;
 
 import java.io.IOException;
@@ -21,11 +21,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 @SuppressLint("MissingPermission")
-public class BluetoothComm {
+public class BluetoothClient {
 
     private static final byte STOP_BYTE = 125;
 
-    private final BluetoothMessageHandler messageHandler;
+    private final WirelessMessageHandler messageHandler;
     private final String deviceName;
 
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
@@ -37,7 +37,7 @@ public class BluetoothComm {
 
     private BluetoothDevice espDevice;
 
-    public BluetoothComm(String deviceName, BluetoothAdapter bluetoothAdapter, BluetoothMessageHandler messageHandler) {
+    public BluetoothClient(String deviceName, BluetoothAdapter bluetoothAdapter, WirelessMessageHandler messageHandler) {
         this.messageHandler = messageHandler;
         this.deviceName = deviceName;
         this.bluetoothAdapter = bluetoothAdapter;
@@ -61,7 +61,7 @@ public class BluetoothComm {
         } catch (IOException ignored) {}
     }
 
-    public void sendMessageToDevice(UdpMessage message) {
+    public void sendMessageToDevice(WirelessMessage message) {
         if (outputStream != null) {
             try {
                 outputStream.write(message.getBytes());
@@ -143,7 +143,7 @@ public class BluetoothComm {
                         sendMessageToDevice(new PingMessage());
                     } else {
                         Log.i(TAG, "Handling message: " + buffer);
-                        messageHandler.handleBluetoothMessage(UdpMessages.parseMessageFromDevice(buffer));
+                        messageHandler.handleWirelessEvent(UdpMessages.parseMessageFromDevice(buffer));
                     }
                 }
             } catch (IOException e) {
