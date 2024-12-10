@@ -33,7 +33,7 @@
             </intent-filter>
         </activity>
         <service
-            android:name=".NetworkService"
+            android:name=".GameService"
             android:enabled="true"
             android:foregroundServiceType="dataSync|mediaPlayback"
             android:exported="false" />

@@ -37,7 +37,7 @@ import net.lasertag.model.WirelessMessage;
 import net.lasertag.model.Player;
 import net.lasertag.model.StatsMessageIn;
 import net.lasertag.model.TimeMessage;
-import net.lasertag.model.UdpMessages;
+import net.lasertag.model.Messaging;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -49,13 +49,14 @@ import java.util.Objects;
 @SuppressLint({"SetTextI18n","InlinedApi","DefaultLocale"})
 public class MainActivity extends AppCompatActivity implements TextToSpeech.OnInitListener {
 
-    //TODO: init based on android version
-    public static final String[] REQUIRED_PERMISSIONS = new String[]{
-            //android.Manifest.permission.BLUETOOTH_CONNECT,
-            //android.Manifest.permission.BLUETOOTH_SCAN,
-            android.Manifest.permission.BLUETOOTH,
-            android.Manifest.permission.BLUETOOTH_ADMIN
-    };
+    public static final String[] REQUIRED_PERMISSIONS =
+        (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S) ? new String[]{} :
+            new String[]{
+                    android.Manifest.permission.BLUETOOTH,
+                    android.Manifest.permission.BLUETOOTH_ADMIN,
+                    android.Manifest.permission.BLUETOOTH_CONNECT,
+                    android.Manifest.permission.BLUETOOTH_SCAN
+            };
 
     private final BroadcastReceiver udpMessageReceiver = new BroadcastReceiver() {
 
@@ -113,12 +114,12 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         super.onCreate(savedInstanceState);
         Log.i(TAG, "onCreate");
         if (allPermissionsGranted()) {
-            startService(new Intent(this, NetworkService.class));
+            startService(new Intent(this, GameService.class));
             registerReceiver(udpMessageReceiver, new IntentFilter(INTERCOM_GAME_MESSAGE), Context.RECEIVER_EXPORTED);
             registerReceiver(udpMessageReceiver, new IntentFilter(INTERCOM_TIME_TICK), Context.RECEIVER_EXPORTED);
             registerReceiver(udpMessageReceiver, new IntentFilter(INTERCOM_GAME_STATE), Context.RECEIVER_EXPORTED);
         } else {
-            requestPermissions();
+            ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS,1);
         }
 
         config = new Config(this);
@@ -145,18 +146,10 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
     private boolean allPermissionsGranted() {
         for (String permission : REQUIRED_PERMISSIONS) {
             if (ActivityCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
-                return true;
+                return false;
             }
         }
         return true;
-    }
-
-    private void requestPermissions() {
-        ActivityCompat.requestPermissions(
-                this,
-                REQUIRED_PERMISSIONS,
-                1
-        );
     }
 
     @Override
@@ -164,7 +157,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == 1) {
             if (allPermissionsGranted()) {
-                Intent serviceIntent = new Intent(this, NetworkService.class);
+                Intent serviceIntent = new Intent(this, GameService.class);
                 startService(serviceIntent);
             } else {
                 Toast.makeText(this, "Permissions not granted. Cannot start the service.", Toast.LENGTH_SHORT).show();
@@ -258,17 +251,17 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         var otherPlayer = getPlayerById(message.getPayload());
         var otherName = otherPlayer != null ? otherPlayer.getName() : "someone";
         switch (message.getType()) {
-            case UdpMessages.GAME_START -> lastLeader = -1;
-            case UdpMessages.GOT_HIT -> {
+            case Messaging.GAME_START -> lastLeader = -1;
+            case Messaging.GOT_HIT -> {
                //maybe make screen flash red or show quick toaster with otherName
             }
-            case UdpMessages.RESPAWN -> showToasterMessage("Play!", 2000);
-            case UdpMessages.YOU_KILLED -> showToasterMessage(otherName + " killed you.", 3000);
-            case UdpMessages.YOU_SCORED -> showToasterMessage("You killed " + otherName, 2000);
-            case UdpMessages.GAME_OVER -> {
+            case Messaging.RESPAWN -> showToasterMessage("Play!", 2000);
+            case Messaging.YOU_KILLED -> showToasterMessage(otherName + " killed you.", 3000);
+            case Messaging.YOU_SCORED -> showToasterMessage("You killed " + otherName, 2000);
+            case Messaging.GAME_OVER -> {
 
                 if (teamPlay) {
-                    var teamName = otherPlayer != null && otherPlayer.getId() > 0 ? teamNames[otherPlayer.getId() - 1] : "No one";
+                    var teamName = teamNames[message.getPayload()];
                     showToasterMessage("Game Over!\n" + teamName + " wins.", 4000);
                 } else {
                     if (otherPlayer != null && otherPlayer.getId() == config.getPlayerId()) {
@@ -311,33 +304,33 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         refreshBulletsBar(player.getBulletsLeft());
     }
 
-    private void announceLeaderChange(Player[] newPlayers) {
-        if (players.length == 0) {
-            return;
-        }
-        if (teamPlay) {
-            var teamScores = getTeamScores(players);
-            var leaderTeam = Collections.max(teamScores.entrySet(), Map.Entry.comparingByValue());
-            var countOfLeaders = (int) teamScores.values().stream().filter(s -> s.equals(leaderTeam.getValue())).count();
-            var newLeaderId = countOfLeaders == 1 ? leaderTeam.getKey() : -1;
-            if (lastLeader != newLeaderId) {
-                var message = (newLeaderId == -1 ? "Teams are tie!" : teamNames[newLeaderId - 1] + " team leads!");
-                new Handler().postDelayed(() -> speak(message), toasterOn ? 2000 : 100);
+    private void updatePlayersInfoAndAnnounceLeaderChange(Player[] newPlayers) {
+        if (players.length > 0) {
+            if (teamPlay) {
+                var teamScores = getTeamScores(players);
+                var maxScoreEntry = Collections.max(teamScores.entrySet(), Map.Entry.comparingByValue());
+                var countOfLeaders = (int) teamScores.values().stream().filter(s -> s.equals(maxScoreEntry.getValue())).count();
+                var newLeaderTeam = countOfLeaders == 1 ? maxScoreEntry.getKey() : -1;
+                if (lastLeader != newLeaderTeam) {
+                    var message = (newLeaderTeam == -1 ? "Teams are tie!" : teamNames[newLeaderTeam] + " team leads!");
+                    new Handler().postDelayed(() -> speak(message), toasterOn ? 2000 : 100);
+                }
+                lastLeader = newLeaderTeam;
+            } else {
+                var maxScore = newPlayers[0].getScore();
+                var countOfLeaders = (int) Arrays.stream(newPlayers).filter(p -> p.getScore() == maxScore).count();
+                var newLeaderId = countOfLeaders == 1 ? newPlayers[0].getId() : -1;
+                if (lastLeader != newLeaderId) {
+                    var message = (newLeaderId == -1 ? "You are tie!" :
+                            (newLeaderId == config.getPlayerId()
+                                    ? "You are"
+                                    : Objects.requireNonNull(getPlayerById(newLeaderId)).getName() + " is") + " the new leader!");
+                    new Handler().postDelayed(() -> speak(message), toasterOn ? 2000 : 100);
+                }
+                lastLeader = newLeaderId;
             }
-            lastLeader = newLeaderId;
-        } else {
-            var maxScore = newPlayers[0].getScore();
-            var countOfLeaders = (int) Arrays.stream(newPlayers).filter(p -> p.getScore() == maxScore).count();
-            var newLeaderId = countOfLeaders == 1 ? newPlayers[0].getId() : -1;
-            if (lastLeader != newLeaderId) {
-                var message = (newLeaderId == -1 ? "You are tie!" :
-                        (newLeaderId == config.getPlayerId()
-                                ? "You are"
-                                : Objects.requireNonNull(getPlayerById(newLeaderId)).getName() + " is") + " the new leader!");
-                new Handler().postDelayed(() -> speak(message), toasterOn ? 2000 : 100);
-            }
-            lastLeader = newLeaderId;
         }
+        players = newPlayers;
     }
 
     private Map<Integer, Integer> getTeamScores(Player[] players) {
@@ -395,8 +388,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
                 teamScoresBar.addView(teamScore);
             }
         }
-        announceLeaderChange(message.getPlayers());
-        players = message.getPlayers();
+        updatePlayersInfoAndAnnounceLeaderChange(message.getPlayers());
     }
 
     private void refreshBulletsBar(int bulletsLeft) {

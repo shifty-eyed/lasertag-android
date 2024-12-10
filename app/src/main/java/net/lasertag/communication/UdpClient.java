@@ -11,7 +11,7 @@ import android.util.Log;
 import net.lasertag.Config;
 import net.lasertag.model.EventMessageToServer;
 import net.lasertag.model.PingMessage;
-import net.lasertag.model.UdpMessages;
+import net.lasertag.model.Messaging;
 
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -23,7 +23,7 @@ public class UdpClient {
 
     private final Config config;
     private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(2);
-    private DatagramSocket serverSocket;
+    private final DatagramSocket serverSocket;
     private volatile boolean isOnline = false;
     private volatile long lastPingTime = 0L;
     private boolean firstEverMessage;
@@ -33,20 +33,19 @@ public class UdpClient {
     public UdpClient(Config config, WirelessMessageHandler messageHandler) {
         this.messageHandler = messageHandler;
         this.config = config;
+        running = true;
+        firstEverMessage = true;
+        try {
+            serverSocket = new DatagramSocket();
+        } catch (SocketException e) {
+            throw new RuntimeException("Failed to create UDP socket", e);
+        }
+        executorService.scheduleWithFixedDelay(this::heartbeat, 0, HEARTBEAT_INTERVAL, java.util.concurrent.TimeUnit.MILLISECONDS);
+        executorService.execute(this::loop);
     }
 
     public boolean isOnline() {
         return isOnline;
-    }
-
-    public void start() throws SocketException {
-        if (!running) {
-            running = true;
-            firstEverMessage = true;
-            serverSocket = new DatagramSocket();
-            executorService.scheduleWithFixedDelay(this::heartbeat, 0, HEARTBEAT_INTERVAL, java.util.concurrent.TimeUnit.MILLISECONDS);
-            executorService.execute(this::loop);
-        }
     }
 
     public void stop() {
@@ -54,6 +53,7 @@ public class UdpClient {
         if (serverSocket != null && !serverSocket.isClosed()) {
             serverSocket.close();
         }
+        executorService.shutdown();
     }
 
     public void sendEventToServer(EventMessageToServer message) {
@@ -71,10 +71,10 @@ public class UdpClient {
         if (System.currentTimeMillis() - lastPingTime > HEARTBEAT_TIMEOUT) {
             Log.i(TAG, "Connection timeout.");
             isOnline = false;
-            messageHandler.handleWirelessEvent(new PingMessage(UdpMessages.LOST_CONNECTION));
+            messageHandler.handleWirelessEvent(new PingMessage(Messaging.LOST_CONNECTION));
         }
         try {
-            byte[] message = new byte[] { UdpMessages.PING, config.getPlayerId(), firstEverMessage ? (byte) 1 : (byte) 0 };
+            byte[] message = new byte[] { Messaging.PING, config.getPlayerId(), firstEverMessage ? (byte) 1 : (byte) 0 };
             var ip = config.getServerAddress() == null ? config.getBroadcastAddress() : config.getServerAddress();
             DatagramPacket packet = new DatagramPacket(message, 3, ip, SERVER_PORT);
             serverSocket.send(packet);
@@ -92,7 +92,7 @@ public class UdpClient {
                 while (running) {
                     var packet = new DatagramPacket(buffer, buffer.length);
                     socket.receive(packet);
-                    var message = UdpMessages.fromBytes(packet.getData(), packet.getLength());
+                    var message = Messaging.fromBytes(packet.getData(), packet.getLength());
                     isOnline = true;
                     if (config.getServerAddress() == null) {
                         Log.i(TAG, "Server IP discovered: " + packet.getAddress());

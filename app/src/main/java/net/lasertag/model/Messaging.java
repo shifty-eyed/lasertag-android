@@ -2,10 +2,9 @@ package net.lasertag.model;
 
 
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.List;
 
-public class UdpMessages {
+public class Messaging {
 
     public static final byte PING = 1;
     public static final byte GUN_SHOT = 2;
@@ -33,16 +32,24 @@ public class UdpMessages {
         } else if (type == FULL_STATS) {
             return parseFullStatsMessage(buffer);
         } else if (type == GAME_TIMER) {
-            return parseTimeMessage(type, buffer);
+            return parseTimeMessage( buffer);
+        } else if (type == GAME_START) {
+            return parseGameStartEventFromServer(buffer);
         } else {
             return parseEventFromServer(type, buffer);
         }
     }
 
-
     private static EventMessageIn parseEventFromServer(byte type, ByteBuffer buffer) {
         var otherPlayerId = buffer.get();
         return new EventMessageIn(type, otherPlayerId);
+    }
+
+    private static GameStartMessageIn parseGameStartEventFromServer(ByteBuffer buffer) {
+        var teamPlay = buffer.get();
+        var respawnTime = buffer.get();
+        var gameTimeMinutes = buffer.get();
+        return new GameStartMessageIn(GAME_START, teamPlay != 0, respawnTime, gameTimeMinutes);
     }
 
     public static EventMessageIn parseMessageFromDevice(List<Byte> bytes) {
@@ -60,23 +67,20 @@ public class UdpMessages {
             var score = buffer.get();
             var teamId = buffer.get();
             var damage = buffer.get();
-            var maxHealth = buffer.get();
-            var maxBullets = buffer.get();
             var bulletsLeft = buffer.get();
             var nameLength = buffer.get();
             var nameBytes = new byte[nameLength];
             buffer.get(nameBytes, 0, nameLength);
             var name = new String(nameBytes);
-            players[i] = new Player(id, health, score, teamId, damage, maxHealth, maxBullets, bulletsLeft, name);
+            players[i] = new Player(id, health, score, teamId, damage, bulletsLeft, name);
         }
-        Arrays.sort(players, (a, b) -> Integer.compare(b.getScore(), a.getScore()));
         return new StatsMessageIn(FULL_STATS, isGameRunning, teamPlay, playersCount, players);
     }
 
-    private static TimeMessage parseTimeMessage(byte type, ByteBuffer buffer) {
+    private static TimeMessage parseTimeMessage(ByteBuffer buffer) {
         var minutes = buffer.get();
         var seconds = buffer.get();
-        return new TimeMessage(type, minutes, seconds);
+        return new TimeMessage(GAME_TIMER, minutes, seconds);
     }
 
 

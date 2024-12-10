@@ -1,5 +1,6 @@
 package net.lasertag.model
 
+import net.lasertag.Config
 import java.io.Serializable
 
 data class Player(
@@ -8,12 +9,10 @@ data class Player(
     var score: Int,
     var teamId: Int,
     var damage: Int,
-    var maxHealth: Int,
-    var maxBullets: Int,
     var bulletsLeft: Int,
     val name: String
 ) : Serializable {
-    constructor(id: Int) : this(id, 0, 0, 0, 0, 0, 0, 0,"NoName")
+    constructor(id: Int) : this(id, 0, 0, 0, 0, 0, "NoName")
 
     fun isAlive(): Boolean {
         return health > 0
@@ -34,8 +33,12 @@ data class Player(
     }
 
     fun respawn() {
-        health = maxHealth
-        bulletsLeft = maxBullets
+        health = Config.MAX_HEALTH
+        bulletsLeft = Config.MAGAZINE_SIZE
+    }
+
+    fun reload() {
+        bulletsLeft = Config.MAGAZINE_SIZE
     }
 
     fun copyFrom(player: Player) {
@@ -43,8 +46,6 @@ data class Player(
         score = player.score
         teamId = player.teamId
         damage = player.damage
-        maxHealth = player.maxHealth
-        maxBullets = player.maxBullets
         bulletsLeft = player.bulletsLeft
     }
 }

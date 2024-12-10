@@ -35,6 +35,9 @@ public class Config {
     public static final long HEARTBEAT_INTERVAL = 2000;
     public static final long HEARTBEAT_TIMEOUT = 5000;
 
+    public static final int MAX_HEALTH = 100;
+    public static final int MAGAZINE_SIZE = 10;
+
 
     private final byte playerId;
     private InetAddress broadcastAddress;

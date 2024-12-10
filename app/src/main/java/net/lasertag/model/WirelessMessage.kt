@@ -11,7 +11,7 @@ abstract class WirelessMessage(
 }
 
 data class PingMessage (
-    override val type: Byte = UdpMessages.PING
+    override val type: Byte = Messaging.PING
 ): WirelessMessage(type)
 
 data class TimeMessage (
@@ -25,6 +25,13 @@ data class EventMessageIn (
     val payload: Byte
 ): WirelessMessage(type)
 
+data class GameStartMessageIn (
+    override val type: Byte,
+    val teamPlay: Boolean,
+    val respawnTime: Int,
+    val gameTimeMinutes: Int
+): WirelessMessage(type)
+
 data class EventMessageToServer (
     override val type: Byte,
     val playerId: Byte,
@@ -36,6 +43,11 @@ data class EventMessageToServer (
     override fun getBytes(): ByteArray {
         return byteArrayOf(type, playerId, otherPlayerId, health, score, bulletsLeft)
     }
+    constructor(
+        type: Byte,
+        player: Player,
+        otherPlayerId: Int
+    ): this(type, player.id.toByte(), otherPlayerId.toByte(), player.health.toByte(), player.score.toByte(), player.bulletsLeft.toByte())
 }
 
 data class MessageToDevice (

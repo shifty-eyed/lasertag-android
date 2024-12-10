@@ -11,7 +11,7 @@ import android.util.Log;
 
 import net.lasertag.model.PingMessage;
 import net.lasertag.model.WirelessMessage;
-import net.lasertag.model.UdpMessages;
+import net.lasertag.model.Messaging;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -41,18 +41,14 @@ public class BluetoothClient {
         this.messageHandler = messageHandler;
         this.deviceName = deviceName;
         this.bluetoothAdapter = bluetoothAdapter;
-    }
-
-    public void start() {
-        if (!running) {
-            running = true;
-            executorService.execute(this::loop);
-        }
+        running = true;
+        executorService.execute(this::loop);
     }
 
     public void stop() {
         running = false;
         try {
+            executorService.shutdown();
             bluetoothSocket.close();
             outputStream.close();
             inputStream.close();
@@ -67,7 +63,7 @@ public class BluetoothClient {
                 outputStream.write(message.getBytes());
                 outputStream.write(STOP_BYTE);
                 outputStream.flush();
-                if (message.getType() != UdpMessages.PING) {
+                if (message.getType() != Messaging.PING) {
                     Log.i(TAG, "Sent to " + deviceName + ": " + message);
                 }
             } catch (IOException e) {
@@ -139,11 +135,11 @@ public class BluetoothClient {
                 if (!buffer.isEmpty()) {
                     if (buffer.size() != 2) {
                         Log.i(TAG, "Got something wrong: " + buffer);
-                    } else if (buffer.get(0) == UdpMessages.PING) {
+                    } else if (buffer.get(0) == Messaging.PING) {
                         sendMessageToDevice(new PingMessage());
                     } else {
                         Log.i(TAG, "Handling message: " + buffer);
-                        messageHandler.handleWirelessEvent(UdpMessages.parseMessageFromDevice(buffer));
+                        messageHandler.handleWirelessEvent(Messaging.parseMessageFromDevice(buffer));
                     }
                 }
             } catch (IOException e) {
