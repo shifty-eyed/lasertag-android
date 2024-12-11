@@ -17,8 +17,10 @@ public class Config {
 
     private static final String PREFS_NAME = "LaserTagPrefs";
     private static final String PLAYER_ID_KEY = "player_id";
+
     public static final String GUN_DEVICE_NAME = "LaserTagGun";
     public static final String VEST_DEVICE_NAME = "LaserTagVest";
+
     public static final UUID SERVICE_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
     public static final String INTERCOM_GAME_MESSAGE = "UDP_MESSAGE_RECEIVED";
@@ -67,15 +69,25 @@ public class Config {
         return broadcastAddress;
     }
 
+    public static final int[] TEAM_COLORS = {
+        R.color.tableRowBackgroundRed,
+        R.color.tableRowBackgroundBlue,
+        R.color.tableRowBackgroundGreen,
+        R.color.tableRowBackgroundYellow,
+        R.color.tableRowBackgroundMagenta,
+        R.color.tableRowBackgroundCyan
+    };
+
+    public static final int[] TEAM_TEXT_COLORS = {
+        R.color.nameTextRed,
+        R.color.nameTextBlue,
+        R.color.nameTextGreen,
+        R.color.nameTextYellow,
+        R.color.nameTextMagenta,
+        R.color.nameTextCyan
+    };
+
     public int getTeamColor(int teamId, boolean background) {
-        return switch (teamId) {
-            case 1 -> background ? R.color.tableRowBackgroundRed : R.color.nameTextRed;
-            case 2 -> background ? R.color.tableRowBackgroundBlue : R.color.nameTextBlue;
-            case 3 -> background ? R.color.tableRowBackgroundGreen : R.color.nameTextGreen;
-            case 4 -> background ? R.color.tableRowBackgroundYellow : R.color.nameTextYellow;
-            case 5 -> background ? R.color.tableRowBackgroundMagenta : R.color.nameTextMagenta;
-            case 6 -> background ? R.color.tableRowBackgroundCyan : R.color.nameTextCyan;
-            default -> R.color.tableRowBackground;
-        };
+        return background ? TEAM_COLORS[teamId] : TEAM_TEXT_COLORS[teamId];
     }
 }

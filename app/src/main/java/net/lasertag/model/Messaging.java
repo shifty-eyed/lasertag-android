@@ -19,16 +19,18 @@ public class Messaging {
     public static final byte FULL_STATS = 11;
     public static final byte GUN_NO_BULLETS = 12;
     public static final byte DEVICE_PLAYER_STATE = 13;
+    public static final byte DEVICE_CONNECTED = 14;
+    public static final byte DEVICE_DISCONNECTED = 15;
 
     public static final byte GAME_TIMER = 101;
-    public static final byte LOST_CONNECTION = 102;
+    public static final byte SERVER_DISCONNECTED = 102;
 
     public static WirelessMessage fromBytes(byte[] bytes, int length) {
         ByteBuffer buffer = ByteBuffer.wrap(bytes, 0, length);
         buffer.order(java.nio.ByteOrder.LITTLE_ENDIAN);
         byte type = buffer.get();
         if (type == PING) {
-            return new PingMessage(PING);
+            return new SignalMessage(PING);
         } else if (type == FULL_STATS) {
             return parseFullStatsMessage(buffer);
         } else if (type == GAME_TIMER) {

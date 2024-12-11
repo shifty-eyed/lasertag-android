@@ -355,18 +355,18 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
             nameText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 2));
 
             TextView scoreText = new TextView(this);
-            scoreText.setText(String.valueOf(player.getScore()));
+            scoreText.setText(currentState == STATE_GAME ? String.valueOf(player.getScore()) : "-");
             scoreText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
 
             TextView healthText = new TextView(this);
-            healthText.setText(String.valueOf(player.getHealth()));
+            healthText.setText(currentState == STATE_GAME ? String.valueOf(player.getHealth()) : "-");
             healthText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
 
             var textFields = Arrays.asList(nameText, scoreText, healthText);
 
             for (TextView text : textFields) {
                 text.setPadding(8, 8, 8, 8);
-                if (player.getHealth() <= 0) {
+                if (player.getHealth() <= 0 && currentState == STATE_GAME) {
                     text.setPaintFlags(text.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG);
                     text.setTextColor(ResourcesCompat.getColor(getResources(), R.color.black, null));
                 } else {

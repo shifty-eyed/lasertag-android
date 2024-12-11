@@ -9,7 +9,8 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
 import android.util.Log;
 
-import net.lasertag.model.PingMessage;
+import net.lasertag.model.EventMessageIn;
+import net.lasertag.model.SignalMessage;
 import net.lasertag.model.WirelessMessage;
 import net.lasertag.model.Messaging;
 
@@ -23,10 +24,14 @@ import java.util.concurrent.Executors;
 @SuppressLint("MissingPermission")
 public class BluetoothClient {
 
+    public static final byte DEVICE_GUN = 1;
+    public static final byte DEVICE_VEST = 2;
+
     private static final byte STOP_BYTE = 125;
 
     private final WirelessMessageHandler messageHandler;
     private final String deviceName;
+    private final byte deviceType;
 
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
     private final BluetoothAdapter bluetoothAdapter;
@@ -37,10 +42,11 @@ public class BluetoothClient {
 
     private BluetoothDevice espDevice;
 
-    public BluetoothClient(String deviceName, BluetoothAdapter bluetoothAdapter, WirelessMessageHandler messageHandler) {
+    public BluetoothClient(String deviceName, int deviceType, BluetoothAdapter bluetoothAdapter, WirelessMessageHandler messageHandler) {
         this.messageHandler = messageHandler;
         this.deviceName = deviceName;
         this.bluetoothAdapter = bluetoothAdapter;
+        this.deviceType = (byte)deviceType;
         running = true;
         executorService.execute(this::loop);
     }
@@ -75,7 +81,7 @@ public class BluetoothClient {
     private void loop() {
         while (running) {
             if (connectToBluetoothDevice()) {
-                sendMessageToDevice(new PingMessage());
+                messageHandler.handleWirelessEvent(new EventMessageIn(Messaging.DEVICE_CONNECTED, deviceType));
                 listening();
             }
             try {
@@ -136,7 +142,7 @@ public class BluetoothClient {
                     if (buffer.size() != 2) {
                         Log.i(TAG, "Got something wrong: " + buffer);
                     } else if (buffer.get(0) == Messaging.PING) {
-                        sendMessageToDevice(new PingMessage());
+                        sendMessageToDevice(new SignalMessage());
                     } else {
                         Log.i(TAG, "Handling message: " + buffer);
                         messageHandler.handleWirelessEvent(Messaging.parseMessageFromDevice(buffer));

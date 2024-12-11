@@ -10,7 +10,7 @@ import android.util.Log;
 
 import net.lasertag.Config;
 import net.lasertag.model.EventMessageToServer;
-import net.lasertag.model.PingMessage;
+import net.lasertag.model.SignalMessage;
 import net.lasertag.model.Messaging;
 
 import java.net.DatagramPacket;
@@ -62,6 +62,7 @@ public class UdpClient {
             var rawMessage = message.getBytes();
             DatagramPacket packet = new DatagramPacket(rawMessage, rawMessage.length, ip, SERVER_PORT);
             serverSocket.send(packet);
+            Log.i(TAG, "Sent to server: " + message);
         } catch (Exception e) {
             Log.e(TAG, "Failed to send event to server", e);
         }
@@ -71,7 +72,7 @@ public class UdpClient {
         if (System.currentTimeMillis() - lastPingTime > HEARTBEAT_TIMEOUT) {
             Log.i(TAG, "Connection timeout.");
             isOnline = false;
-            messageHandler.handleWirelessEvent(new PingMessage(Messaging.LOST_CONNECTION));
+            messageHandler.handleWirelessEvent(new SignalMessage(Messaging.SERVER_DISCONNECTED));
         }
         try {
             byte[] message = new byte[] { Messaging.PING, config.getPlayerId(), firstEverMessage ? (byte) 1 : (byte) 0 };
@@ -98,8 +99,10 @@ public class UdpClient {
                         Log.i(TAG, "Server IP discovered: " + packet.getAddress());
                         config.setServerAddress(packet.getAddress());
                     }
-                    messageHandler.handleWirelessEvent(message);
                     lastPingTime = System.currentTimeMillis();
+                    if (message.getType() != Messaging.PING) {
+                        messageHandler.handleWirelessEvent(message);
+                    }
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Failed to receive UDP message", e);

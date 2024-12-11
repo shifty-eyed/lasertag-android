@@ -10,7 +10,7 @@ abstract class WirelessMessage(
     }
 }
 
-data class PingMessage (
+data class SignalMessage (
     override val type: Byte = Messaging.PING
 ): WirelessMessage(type)
 

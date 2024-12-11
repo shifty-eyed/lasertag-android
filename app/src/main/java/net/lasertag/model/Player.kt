@@ -10,9 +10,9 @@ data class Player(
     var teamId: Int,
     var damage: Int,
     var bulletsLeft: Int,
-    val name: String
+    var name: String
 ) : Serializable {
-    constructor(id: Int) : this(id, 0, 0, 0, 0, 0, "NoName")
+    constructor(id: Int) : this(id, 100, 0, 0, 0, 0, "NoName")
 
     fun isAlive(): Boolean {
         return health > 0
@@ -47,5 +47,6 @@ data class Player(
         teamId = player.teamId
         damage = player.damage
         bulletsLeft = player.bulletsLeft
+        name = player.name
     }
 }

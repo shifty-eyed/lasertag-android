@@ -43,6 +43,7 @@ public class GameService extends Service {
 
     private volatile boolean isActive = true;
     private volatile boolean isGameRunning = false;
+    private volatile boolean isGameStartPending = false;
     private volatile boolean teamPlay = false;
     private volatile int currentState = -1;
     private volatile int respawnTimeoutSeconds = 0;
@@ -52,7 +53,7 @@ public class GameService extends Service {
     private static final int TIMER_RESPAWN = 1;
 
 
-    private final Player thisPlayer = new Player(config.getPlayerId());
+    private Player thisPlayer;
     private Player[] allPlayersSnapshot = new Player[0];
 
     private StatsMessageIn lastStatsMessage;
@@ -83,6 +84,7 @@ public class GameService extends Service {
     public void onCreate() {
         super.onCreate();
         config = new Config(this);
+        thisPlayer = new Player(config.getPlayerId());
         soundManager = new SoundManager(this);
 
         createNotificationChannel();
@@ -99,8 +101,8 @@ public class GameService extends Service {
         try {
             var bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
 
-            gunComm = new BluetoothClient(Config.GUN_DEVICE_NAME, bluetoothAdapter, this::handleEventFromDevice);
-            vestComm = new BluetoothClient(Config.VEST_DEVICE_NAME, bluetoothAdapter, this::handleEventFromDevice);
+            gunComm = new BluetoothClient(Config.GUN_DEVICE_NAME, BluetoothClient.DEVICE_GUN, bluetoothAdapter, this::handleEventFromDevice);
+            vestComm = new BluetoothClient(Config.VEST_DEVICE_NAME, BluetoothClient.DEVICE_VEST, bluetoothAdapter, this::handleEventFromDevice);
             udpClient = new UdpClient(config, this::handleEventFromServer);
 
             executorService.scheduleWithFixedDelay(this::timerTick, 0, 1, java.util.concurrent.TimeUnit.SECONDS);
@@ -141,6 +143,9 @@ public class GameService extends Service {
     }
 
     private void timerTick() {
+        if (!isGameStartPending && !isGameRunning) {
+            return;
+        }
         for (AtomicInteger gameTimer : timerCounters) {
             if (gameTimer.decrementAndGet() < 0) {
                 gameTimer.set(0);
@@ -150,7 +155,7 @@ public class GameService extends Service {
         var minutes = (byte) (timerCounters[timerId].get() / 60);
         var seconds = (byte) (timerCounters[timerId].get() % 60);
         sendMessageToActivity(new TimeMessage(Messaging.GAME_TIMER, minutes, seconds), INTERCOM_TIME_TICK);
-    }
+}
 
     private void evaluateCurrentState() {
         var newState = -1;
@@ -205,6 +210,7 @@ public class GameService extends Service {
     private void respawn() {
         soundManager.playRespawn();
         isGameRunning = true;
+        isGameStartPending = false;
         thisPlayer.respawn();
         udpClient.sendEventToServer(new EventMessageToServer(Messaging.RESPAWN, thisPlayer,  0));
     }
@@ -217,6 +223,7 @@ public class GameService extends Service {
                 isGameRunning = false;
             }
             case Messaging.GAME_START -> {
+                isGameStartPending = true;
                 soundManager.playGameStart();
                 var gameStartMessage = (GameStartMessageIn) message;
                 teamPlay = gameStartMessage.getTeamPlay();
@@ -253,11 +260,22 @@ public class GameService extends Service {
 
     public void handleEventFromDevice(WirelessMessage message) {
         var type = message.getType();
-        var otherPlayerId = ((EventMessageIn)message).getPayload();
+        var extraValue = ((EventMessageIn)message).getPayload();
         switch (message.getType()) {
+            case Messaging.DEVICE_CONNECTED -> {
+                sendCurrentStateToDevice();
+                //TODO use extraValue to indicate which device connected
+                ////2 handle disconnected
+                return;
+            }
             case Messaging.GUN_SHOT -> {
-                soundManager.playGunShot();
-                thisPlayer.decreaseBullets();
+                if (thisPlayer.getBulletsLeft() > 0) {
+                    soundManager.playGunShot();
+                    thisPlayer.decreaseBullets();
+                } else {
+                    soundManager.playNoBullets();
+                    type = Messaging.GUN_NO_BULLETS;
+                }
             }
             case Messaging.GUN_RELOAD -> {
                 soundManager.playReload();
@@ -265,7 +283,7 @@ public class GameService extends Service {
             }
             case Messaging.GOT_HIT -> {
                 //Assumed that other player has bullets > 0, not dead, game started
-                var otherPlayer = getPlayerById(otherPlayerId);
+                var otherPlayer = getPlayerById(extraValue);
                 if (otherPlayer.getTeamId() == thisPlayer.getTeamId()) {
                     //maybe play Friendly fire
                     return;
@@ -281,12 +299,11 @@ public class GameService extends Service {
                     executorService.schedule(this::respawn, respawnTimeoutSeconds, java.util.concurrent.TimeUnit.SECONDS);
                 }
             }
-            case Messaging.GUN_NO_BULLETS -> soundManager.playNoBullets();
         }
         if (type != Messaging.GUN_NO_BULLETS) {
-            udpClient.sendEventToServer(new EventMessageToServer(type, thisPlayer, otherPlayerId));
+            udpClient.sendEventToServer(new EventMessageToServer(type, thisPlayer, extraValue));
         }
-        sendMessageToActivity(new EventMessageIn(type, otherPlayerId), INTERCOM_GAME_MESSAGE);
+        sendMessageToActivity(new EventMessageIn(type, extraValue), INTERCOM_GAME_MESSAGE);
     }
 
     private Player getPlayerById(int id) {
