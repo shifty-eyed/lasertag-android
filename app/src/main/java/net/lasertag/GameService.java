@@ -157,11 +157,12 @@ public class GameService extends Service {
         sendMessageToActivity(new TimeMessage(Messaging.GAME_TIMER, minutes, seconds), INTERCOM_TIME_TICK);
 }
 
-    private void evaluateCurrentState() {
+    // return true if state changed
+    private boolean evaluateCurrentState() {
         var newState = -1;
         if (!udpClient.isOnline()) {
             newState = STATE_OFFLINE;
-        } else if (!isGameRunning) {
+        } else if (!isGameRunning || isGameStartPending) {
             newState = STATE_IDLE;
         } else {
             newState = !thisPlayer.isAlive() ? STATE_DEAD : STATE_GAME;
@@ -170,6 +171,9 @@ public class GameService extends Service {
             currentState = newState;
             sendCurrentStateToActivity();
             sendCurrentStateToDevice();
+            return true;
+        } else {
+            return false;
         }
     }
 
@@ -212,6 +216,7 @@ public class GameService extends Service {
         isGameRunning = true;
         isGameStartPending = false;
         thisPlayer.respawn();
+        evaluateCurrentState();
         udpClient.sendEventToServer(new EventMessageToServer(Messaging.RESPAWN, thisPlayer,  0));
     }
 
@@ -228,9 +233,9 @@ public class GameService extends Service {
                 var gameStartMessage = (GameStartMessageIn) message;
                 teamPlay = gameStartMessage.getTeamPlay();
                 respawnTimeoutSeconds = gameStartMessage.getRespawnTime();
-                timerCounters[TIMER_GAME].set(gameStartMessage.getGameTimeMinutes() * 60 + respawnTimeoutSeconds);
-                timerCounters[TIMER_RESPAWN].set(respawnTimeoutSeconds);
-                executorService.schedule(this::respawn, respawnTimeoutSeconds, java.util.concurrent.TimeUnit.SECONDS);
+                timerCounters[TIMER_GAME].set(gameStartMessage.getGameTimeMinutes() * 60 + gameStartMessage.getStartDelaySeconds());
+                timerCounters[TIMER_RESPAWN].set(gameStartMessage.getStartDelaySeconds());
+                executorService.schedule(this::respawn, gameStartMessage.getStartDelaySeconds(), java.util.concurrent.TimeUnit.SECONDS);
             }
             case Messaging.YOU_SCORED -> {
                 soundManager.playYouScored();
@@ -241,20 +246,16 @@ public class GameService extends Service {
                 isGameRunning = statsMessage.isGameRunning();
                 teamPlay = statsMessage.isTeamPlay();
                 allPlayersSnapshot = statsMessage.getPlayers();
+                timerCounters[TIMER_GAME].set(statsMessage.getGameTimerSeconds());
                 Arrays.stream(allPlayersSnapshot)
                         .filter(p -> p.getId() == config.getPlayerId())
                         .findFirst()
                         .ifPresent(thisPlayer::copyFrom);
-                sendCurrentStateToDevice();
-            }
-            case Messaging.GAME_TIMER -> {
-                var timeMessage = (TimeMessage) message;
-                timerCounters[TIMER_GAME].set(timeMessage.getMinutes() * 60 + timeMessage.getSeconds());
             }
         }
         sendMessageToActivity(message, INTERCOM_GAME_MESSAGE);
-        if (message.getType() != Messaging.GAME_TIMER) {
-            evaluateCurrentState();
+        if (!evaluateCurrentState()) {//send state anyway
+            sendCurrentStateToDevice();
         }
     }
 
@@ -262,12 +263,8 @@ public class GameService extends Service {
         var type = message.getType();
         var extraValue = ((EventMessageIn)message).getPayload();
         switch (message.getType()) {
-            case Messaging.DEVICE_CONNECTED -> {
-                sendCurrentStateToDevice();
-                //TODO use extraValue to indicate which device connected
-                ////2 handle disconnected
-                return;
-            }
+            case Messaging.DEVICE_CONNECTED -> sendCurrentStateToDevice();
+            // Messaging.DEVICE_DISCONNECTED has no action, just propagate to activity
             case Messaging.GUN_SHOT -> {
                 if (thisPlayer.getBulletsLeft() > 0) {
                     soundManager.playGunShot();

@@ -29,7 +29,8 @@ data class GameStartMessageIn (
     override val type: Byte,
     val teamPlay: Boolean,
     val respawnTime: Int,
-    val gameTimeMinutes: Int
+    val gameTimeMinutes: Int,
+    val startDelaySeconds: Int
 ): WirelessMessage(type)
 
 data class EventMessageToServer (
@@ -66,6 +67,7 @@ data class StatsMessageIn (
     override val type: Byte,
     val isGameRunning: Boolean,
     val isTeamPlay: Boolean,
+    val gameTimerSeconds: Short,
     val numPlayers: Byte,
     val players: Array<Player>
 ) : WirelessMessage(type) {

@@ -32,6 +32,7 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Toast;
 
+import net.lasertag.communication.BluetoothClient;
 import net.lasertag.model.EventMessageIn;
 import net.lasertag.model.WirelessMessage;
 import net.lasertag.model.Player;
@@ -87,6 +88,8 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
     private TextView playerName;
     private TextView playerHealth;
     private TextView playerScore;
+    private ImageView deviceStatusGun;
+    private ImageView deviceStatusVest;
     private TableLayout playersTable;
     private ConstraintLayout playerInfoLayout;
     private ConstraintLayout announcementLayout;
@@ -138,6 +141,9 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         gameTime = findViewById(R.id.game_timer);
         bulletsBar = findViewById(R.id.bullets_bar);
         teamScoresBar = findViewById(R.id.team_scores);
+
+        deviceStatusGun = findViewById(R.id.device_status_gun);
+        deviceStatusVest = findViewById(R.id.device_status_vest);
 
         currentState = STATE_OFFLINE;
         onRefreshUIGameSate();
@@ -259,9 +265,8 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
             case Messaging.YOU_KILLED -> showToasterMessage(otherName + " killed you.", 3000);
             case Messaging.YOU_SCORED -> showToasterMessage("You killed " + otherName, 2000);
             case Messaging.GAME_OVER -> {
-
                 if (teamPlay) {
-                    var teamName = teamNames[message.getPayload()];
+                    var teamName = message.getPayload() < 0 ? "No one" : teamNames[message.getPayload()];
                     showToasterMessage("Game Over!\n" + teamName + " wins.", 4000);
                 } else {
                     if (otherPlayer != null && otherPlayer.getId() == config.getPlayerId()) {
@@ -270,6 +275,14 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
                         showToasterMessage("Game Over!\n" + (otherPlayer == null ? "No one" : otherPlayer.getName()) + " wins.", 4000);
                     }
                 }
+            }
+            case Messaging.DEVICE_CONNECTED, Messaging.DEVICE_DISCONNECTED -> {
+                var connected = (message.getType() == Messaging.DEVICE_CONNECTED);
+                var isGun = (message.getPayload() == BluetoothClient.DEVICE_GUN);
+                var deviceName = isGun ? "gun" : "vest";
+                (isGun ? deviceStatusGun : deviceStatusVest)
+                        .setVisibility(connected ? View.GONE : View.VISIBLE);
+                speak(deviceName + (connected ? " connected." : " disconnected."));
             }
         }
     }

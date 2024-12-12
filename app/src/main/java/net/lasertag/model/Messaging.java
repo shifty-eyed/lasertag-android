@@ -51,7 +51,8 @@ public class Messaging {
         var teamPlay = buffer.get();
         var respawnTime = buffer.get();
         var gameTimeMinutes = buffer.get();
-        return new GameStartMessageIn(GAME_START, teamPlay != 0, respawnTime, gameTimeMinutes);
+        var startDelaySeconds = buffer.get();
+        return new GameStartMessageIn(GAME_START, teamPlay != 0, respawnTime, gameTimeMinutes, startDelaySeconds);
     }
 
     public static EventMessageIn parseMessageFromDevice(List<Byte> bytes) {
@@ -61,6 +62,7 @@ public class Messaging {
     private static StatsMessageIn parseFullStatsMessage(ByteBuffer buffer) {
         var isGameRunning = buffer.get() != 0;
         var teamPlay = buffer.get() != 0;
+        var gameTimerSeconds = buffer.getShort();
         var playersCount = buffer.get();
         var players = new Player[playersCount];
         for (int i = 0; i < playersCount; i++) {
@@ -76,7 +78,7 @@ public class Messaging {
             var name = new String(nameBytes);
             players[i] = new Player(id, health, score, teamId, damage, bulletsLeft, name);
         }
-        return new StatsMessageIn(FULL_STATS, isGameRunning, teamPlay, playersCount, players);
+        return new StatsMessageIn(FULL_STATS, isGameRunning, teamPlay, gameTimerSeconds, playersCount, players);
     }
 
     private static TimeMessage parseTimeMessage(ByteBuffer buffer) {

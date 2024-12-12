@@ -150,6 +150,7 @@ public class BluetoothClient {
                 }
             } catch (IOException e) {
                 Log.e(TAG, "Connection lost", e);
+                messageHandler.handleWirelessEvent(new EventMessageIn(Messaging.DEVICE_DISCONNECTED, deviceType));
                 try {
                     bluetoothSocket.close();
                     outputStream = null;
