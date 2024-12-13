@@ -11,7 +11,7 @@ data class Player(
     var damage: Int,
     var bulletsLeft: Int,
     var name: String
-) : Serializable {
+) : Serializable, Comparable<Player> {
     constructor(id: Int) : this(id, 100, 0, 0, 0, 0, "NoName")
 
     fun isAlive(): Boolean {
@@ -41,12 +41,28 @@ data class Player(
         bulletsLeft = Config.MAGAZINE_SIZE
     }
 
-    fun copyFrom(player: Player) {
+    fun copyPlayerValuesFrom(player: Player) {
         health = player.health
         score = player.score
         teamId = player.teamId
         damage = player.damage
-        bulletsLeft = player.bulletsLeft
-        name = player.name
+        if (player.name.isNotEmpty()) {
+            name = player.name
+        }
+    }
+
+    override fun compareTo(other: Player): Int {
+        return other.score - score
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        other as Player
+        return id == other.id
+    }
+
+    override fun hashCode(): Int {
+        return id
     }
 }

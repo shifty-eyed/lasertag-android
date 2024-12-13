@@ -8,6 +8,16 @@ abstract class WirelessMessage(
     open fun getBytes(): ByteArray {
         return byteArrayOf(type)
     }
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        other as StatsMessageIn
+        return type == other.type
+    }
+
+    override fun hashCode(): Int {
+        return type.toInt()
+    }
 }
 
 data class SignalMessage (
@@ -30,8 +40,16 @@ data class GameStartMessageIn (
     val teamPlay: Boolean,
     val respawnTime: Int,
     val gameTimeMinutes: Int,
-    val startDelaySeconds: Int
+    val startDelaySeconds: Int,
 ): WirelessMessage(type)
+
+data class StatsMessageIn (
+    override val type: Byte,
+    val isGameRunning: Boolean,
+    val isTeamPlay: Boolean,
+    val gameTimerSeconds: Short,
+    var players: Array<Player>
+) : WirelessMessage(type)
 
 data class EventMessageToServer (
     override val type: Byte,
@@ -60,25 +78,5 @@ data class MessageToDevice (
 ): WirelessMessage(type) {
     override fun getBytes(): ByteArray {
         return byteArrayOf(type, playerId, playerTeam, playerState, bulletsLeft)
-    }
-}
-
-data class StatsMessageIn (
-    override val type: Byte,
-    val isGameRunning: Boolean,
-    val isTeamPlay: Boolean,
-    val gameTimerSeconds: Short,
-    val numPlayers: Byte,
-    val players: Array<Player>
-) : WirelessMessage(type) {
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (javaClass != other?.javaClass) return false
-        other as StatsMessageIn
-        return type == other.type
-    }
-
-    override fun hashCode(): Int {
-        return type.toInt()
     }
 }

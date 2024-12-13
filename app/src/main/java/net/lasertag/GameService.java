@@ -28,7 +28,9 @@ import net.lasertag.model.StatsMessageIn;
 import net.lasertag.model.TimeMessage;
 import net.lasertag.model.Messaging;
 
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -54,7 +56,7 @@ public class GameService extends Service {
 
 
     private Player thisPlayer;
-    private Player[] allPlayersSnapshot = new Player[0];
+    private final List<Player> allPlayersSnapshot = new ArrayList<>();
 
     private StatsMessageIn lastStatsMessage;
     private EventMessageIn lastReceivedEvent;
@@ -199,9 +201,16 @@ public class GameService extends Service {
         if (message == null || message.getType() == Messaging.PING) {
             return;
         }
+
         if (isActive) {
             Intent broadcastIntent = new Intent(action);
-            broadcastIntent.putExtra("message", message);
+            if (message instanceof StatsMessageIn) {
+                var statsMessage = (StatsMessageIn) message;
+                statsMessage.setPlayers(allPlayersSnapshot.toArray(new Player[0]));
+                broadcastIntent.putExtra("message", statsMessage);
+            } else {
+                broadcastIntent.putExtra("message", message);
+            }
             broadcastIntent.putExtra("player", thisPlayer);
             sendBroadcast(broadcastIntent);
         } else if (message instanceof StatsMessageIn) {
@@ -218,6 +227,7 @@ public class GameService extends Service {
         thisPlayer.respawn();
         evaluateCurrentState();
         udpClient.sendEventToServer(new EventMessageToServer(Messaging.RESPAWN, thisPlayer,  0));
+        sendMessageToActivity(new EventMessageIn(Messaging.RESPAWN, (byte)0), INTERCOM_GAME_MESSAGE);
     }
 
     private void handleEventFromServer(WirelessMessage message) {
@@ -241,16 +251,28 @@ public class GameService extends Service {
                 soundManager.playYouScored();
                 thisPlayer.setScore(thisPlayer.getScore() + 1);
             }
-            case Messaging.FULL_STATS -> {
+            case Messaging.PLAYER_VALUES_SNAPSHOT -> {
                 var statsMessage = (StatsMessageIn) message;
                 isGameRunning = statsMessage.isGameRunning();
                 teamPlay = statsMessage.isTeamPlay();
-                allPlayersSnapshot = statsMessage.getPlayers();
                 timerCounters[TIMER_GAME].set(statsMessage.getGameTimerSeconds());
-                Arrays.stream(allPlayersSnapshot)
-                        .filter(p -> p.getId() == config.getPlayerId())
-                        .findFirst()
-                        .ifPresent(thisPlayer::copyFrom);
+                //update all players
+                for (var playerUpdates : statsMessage.getPlayers()) {
+                    if (!allPlayersSnapshot.contains(playerUpdates)) {
+                        allPlayersSnapshot.add(playerUpdates);
+                    } else {
+                        for (var existingPlayer : allPlayersSnapshot) {
+                            if (existingPlayer.getId() == playerUpdates.getId()) {
+                                existingPlayer.copyPlayerValuesFrom(playerUpdates);
+                            }
+                        }
+                    }
+                }
+                Collections.sort(allPlayersSnapshot);
+                var myData = getPlayerById(config.getPlayerId());
+                if (myData != null) {
+                    thisPlayer.copyPlayerValuesFrom(myData);
+                }
             }
         }
         sendMessageToActivity(message, INTERCOM_GAME_MESSAGE);
@@ -304,7 +326,7 @@ public class GameService extends Service {
     }
 
     private Player getPlayerById(int id) {
-        return Arrays.stream(allPlayersSnapshot)
+        return allPlayersSnapshot.stream()
                 .filter(p -> p.getId() == id)
                 .findFirst()
                 .orElse(null);

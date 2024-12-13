@@ -368,11 +368,11 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
             nameText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 2));
 
             TextView scoreText = new TextView(this);
-            scoreText.setText(currentState == STATE_GAME ? String.valueOf(player.getScore()) : "-");
+            scoreText.setText(String.valueOf(player.getScore()));
             scoreText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
 
             TextView healthText = new TextView(this);
-            healthText.setText(currentState == STATE_GAME ? String.valueOf(player.getHealth()) : "-");
+            healthText.setText(String.valueOf(player.getHealth()));
             healthText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
 
             var textFields = Arrays.asList(nameText, scoreText, healthText);

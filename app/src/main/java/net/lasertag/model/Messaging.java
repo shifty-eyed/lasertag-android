@@ -16,7 +16,7 @@ public class Messaging {
     public static final byte GAME_START = 8;
     public static final byte YOU_KILLED = 9;
     public static final byte YOU_SCORED = 10;
-    public static final byte FULL_STATS = 11;
+    public static final byte PLAYER_VALUES_SNAPSHOT = 11;
     public static final byte GUN_NO_BULLETS = 12;
     public static final byte DEVICE_PLAYER_STATE = 13;
     public static final byte DEVICE_CONNECTED = 14;
@@ -31,10 +31,8 @@ public class Messaging {
         byte type = buffer.get();
         if (type == PING) {
             return new SignalMessage(PING);
-        } else if (type == FULL_STATS) {
+        } else if (type == PLAYER_VALUES_SNAPSHOT) {
             return parseFullStatsMessage(buffer);
-        } else if (type == GAME_TIMER) {
-            return parseTimeMessage( buffer);
         } else if (type == GAME_START) {
             return parseGameStartEventFromServer(buffer);
         } else {
@@ -71,21 +69,14 @@ public class Messaging {
             var score = buffer.get();
             var teamId = buffer.get();
             var damage = buffer.get();
-            var bulletsLeft = buffer.get();
             var nameLength = buffer.get();
             var nameBytes = new byte[nameLength];
-            buffer.get(nameBytes, 0, nameLength);
-            var name = new String(nameBytes);
-            players[i] = new Player(id, health, score, teamId, damage, bulletsLeft, name);
+            if (nameLength > 0) {
+                buffer.get(nameBytes, 0, nameLength);
+            }
+            players[i] = new Player(id, health, score, teamId, damage, 0, new String(nameBytes));
         }
-        return new StatsMessageIn(FULL_STATS, isGameRunning, teamPlay, gameTimerSeconds, playersCount, players);
+        return new StatsMessageIn(PLAYER_VALUES_SNAPSHOT, isGameRunning, teamPlay, gameTimerSeconds, players);
     }
-
-    private static TimeMessage parseTimeMessage(ByteBuffer buffer) {
-        var minutes = buffer.get();
-        var seconds = buffer.get();
-        return new TimeMessage(GAME_TIMER, minutes, seconds);
-    }
-
 
 }
