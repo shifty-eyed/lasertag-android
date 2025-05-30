@@ -75,7 +75,7 @@ public class UdpClient {
             messageHandler.handleWirelessEvent(new SignalMessage(Messaging.SERVER_DISCONNECTED));
         }
         try {
-            byte[] message = new byte[] { Messaging.PING, config.getPlayerId(), firstEverMessage ? (byte) 1 : (byte) 0 };
+            byte[] message = new byte[] { Messaging.PLAYER_REPLY_PING, config.getPlayerId(), firstEverMessage ? (byte) 1 : (byte) 0 };
             var ip = config.getServerAddress() == null ? config.getBroadcastAddress() : config.getServerAddress();
             DatagramPacket packet = new DatagramPacket(message, 3, ip, SERVER_PORT);
             serverSocket.send(packet);

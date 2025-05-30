@@ -48,12 +48,9 @@ public class GameService extends Service {
     private volatile boolean isGameStartPending = false;
     private volatile boolean teamPlay = false;
     private volatile int currentState = -1;
-    private volatile int respawnTimeoutSeconds = 0;
 
     private final AtomicInteger[] timerCounters = new AtomicInteger[] { new AtomicInteger(0), new AtomicInteger(0) };
     private static final int TIMER_GAME = 0;
-    private static final int TIMER_RESPAWN = 1;
-
 
     private Player thisPlayer;
     private final List<Player> allPlayersSnapshot = new ArrayList<>();
@@ -153,9 +150,8 @@ public class GameService extends Service {
                 gameTimer.set(0);
             }
         }
-        var timerId = currentState == STATE_GAME ? TIMER_GAME : TIMER_RESPAWN;
-        var minutes = (byte) (timerCounters[timerId].get() / 60);
-        var seconds = (byte) (timerCounters[timerId].get() % 60);
+        var minutes = (byte) (timerCounters[TIMER_GAME].get() / 60);
+        var seconds = (byte) (timerCounters[TIMER_GAME].get() % 60);
         sendMessageToActivity(new TimeMessage(Messaging.GAME_TIMER, minutes, seconds), INTERCOM_TIME_TICK);
 }
 
@@ -192,7 +188,7 @@ public class GameService extends Service {
                 config.getPlayerId(),
                 (byte)thisPlayer.getTeamId(),
                 (byte)currentState,
-                (byte)thisPlayer.getBulletsLeft());
+                (byte)thisPlayer.getBulletsInMagazine());
         gunComm.sendMessageToDevice(message);
         vestComm.sendMessageToDevice(message);
     }
@@ -220,16 +216,6 @@ public class GameService extends Service {
         }
     }
 
-    private void respawn() {
-        soundManager.playRespawn();
-        isGameRunning = true;
-        isGameStartPending = false;
-        thisPlayer.respawn();
-        evaluateCurrentState();
-        udpClient.sendEventToServer(new EventMessageToServer(Messaging.RESPAWN, thisPlayer,  0));
-        sendMessageToActivity(new EventMessageIn(Messaging.RESPAWN, (byte)0), INTERCOM_GAME_MESSAGE);
-    }
-
     private void handleEventFromServer(WirelessMessage message) {
         switch (message.getType()) {
             case Messaging.YOU_HIT_SOMEONE -> soundManager.playYouHitSomeone();
@@ -242,10 +228,7 @@ public class GameService extends Service {
                 soundManager.playGameStart();
                 var gameStartMessage = (GameStartMessageIn) message;
                 teamPlay = gameStartMessage.getTeamPlay();
-                respawnTimeoutSeconds = gameStartMessage.getRespawnTime();
-                timerCounters[TIMER_GAME].set(gameStartMessage.getGameTimeMinutes() * 60 + gameStartMessage.getStartDelaySeconds());
-                timerCounters[TIMER_RESPAWN].set(gameStartMessage.getStartDelaySeconds());
-                executorService.schedule(this::respawn, gameStartMessage.getStartDelaySeconds(), java.util.concurrent.TimeUnit.SECONDS);
+                timerCounters[TIMER_GAME].set(gameStartMessage.getGameTimeMinutes() * 60);
             }
             case Messaging.YOU_SCORED -> {
                 soundManager.playYouScored();
@@ -284,16 +267,19 @@ public class GameService extends Service {
     public void handleEventFromDevice(WirelessMessage message) {
         var type = message.getType();
         var extraValue = ((EventMessageIn)message).getPayload();
+        var propagateToServer = true;
+        var propagateToActivity = true;
         switch (message.getType()) {
             case Messaging.DEVICE_CONNECTED -> sendCurrentStateToDevice();
             // Messaging.DEVICE_DISCONNECTED has no action, just propagate to activity
             case Messaging.GUN_SHOT -> {
-                if (thisPlayer.getBulletsLeft() > 0) {
+                if (thisPlayer.getBulletsInMagazine() > 0) {
                     soundManager.playGunShot();
                     thisPlayer.decreaseBullets();
                 } else {
                     soundManager.playNoBullets();
                     type = Messaging.GUN_NO_BULLETS;
+                    propagateToServer = false;
                 }
             }
             case Messaging.GUN_RELOAD -> {
@@ -314,15 +300,43 @@ public class GameService extends Service {
                     soundManager.playYouKilled();
                     evaluateCurrentState();
                     type = Messaging.YOU_KILLED;
-                    timerCounters[TIMER_RESPAWN].set(respawnTimeoutSeconds);
-                    executorService.schedule(this::respawn, respawnTimeoutSeconds, java.util.concurrent.TimeUnit.SECONDS);
+                }
+            }
+            case Messaging.GOT_HEALTH -> {
+                if (thisPlayer.increaseHealth(extraValue)) {
+                    soundManager.playGotHealth();
+                } else {
+                    propagateToServer = false;
+                    propagateToActivity = false;
+                }
+            }
+            case Messaging.GOT_AMMO -> {
+                if (thisPlayer.increaseBullets(extraValue)) {
+                    soundManager.playGotAmmo();
+                } else {
+                    propagateToServer = false;
+                    propagateToActivity = false;
+                }
+            }
+            case Messaging.RESPAWN -> {
+                if (extraValue == thisPlayer.getAssignedRespawnPoint()) {
+                    soundManager.playRespawn();
+                    isGameRunning = true;
+                    isGameStartPending = false;
+                    thisPlayer.respawn();
+                    evaluateCurrentState();
+                } else {
+                    propagateToServer = false;
+                    type = Messaging.RESPAWN_POINT_WRONG;
                 }
             }
         }
-        if (type != Messaging.GUN_NO_BULLETS) {
+        if (propagateToServer) {
             udpClient.sendEventToServer(new EventMessageToServer(type, thisPlayer, extraValue));
         }
-        sendMessageToActivity(new EventMessageIn(type, extraValue), INTERCOM_GAME_MESSAGE);
+        if (propagateToActivity) {
+            sendMessageToActivity(new EventMessageIn(type, extraValue), INTERCOM_GAME_MESSAGE);
+        }
     }
 
     private Player getPlayerById(int id) {

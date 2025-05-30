@@ -11,7 +11,7 @@ abstract class WirelessMessage(
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
-        other as StatsMessageIn
+        other as WirelessMessage
         return type == other.type
     }
 
@@ -38,9 +38,7 @@ data class EventMessageIn (
 data class GameStartMessageIn (
     override val type: Byte,
     val teamPlay: Boolean,
-    val respawnTime: Int,
-    val gameTimeMinutes: Int,
-    val startDelaySeconds: Int,
+    val gameTimeMinutes: Int
 ): WirelessMessage(type)
 
 data class StatsMessageIn (
@@ -54,19 +52,17 @@ data class StatsMessageIn (
 data class EventMessageToServer (
     override val type: Byte,
     val playerId: Byte,
-    val otherPlayerId: Byte,
-    val health: Byte,
-    val score: Byte,
-    val bulletsLeft: Byte
+    val extraValue: Byte,
+    val health: Byte
 ): WirelessMessage(type) {
     override fun getBytes(): ByteArray {
-        return byteArrayOf(type, playerId, otherPlayerId, health, score, bulletsLeft)
+        return byteArrayOf(type, playerId, extraValue, health)
     }
     constructor(
         type: Byte,
         player: Player,
-        otherPlayerId: Int
-    ): this(type, player.id.toByte(), otherPlayerId.toByte(), player.health.toByte(), player.score.toByte(), player.bulletsLeft.toByte())
+        extraValue: Int
+    ): this(type, player.id.toByte(), extraValue.toByte(), player.health.toByte())
 }
 
 data class MessageToDevice (

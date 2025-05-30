@@ -9,10 +9,14 @@ data class Player(
     var score: Int,
     var teamId: Int,
     var damage: Int,
-    var bulletsLeft: Int,
+    var bulletsInMagazine: Int,
+    var bulletsTotal: Int,
+    var bulletsMax: Int,
+    var assignedRespawnPoint: Int,
+    var flagCarrier: Boolean,
     var name: String
 ) : Serializable, Comparable<Player> {
-    constructor(id: Int) : this(id, 100, 0, 0, 0, 0, "NoName")
+    constructor(id: Int) : this(id, 100, 0, 0, 0, 0, 0, 0, 0, false,"NoName")
 
     fun isAlive(): Boolean {
         return health > 0
@@ -25,20 +29,49 @@ data class Player(
         }
     }
 
-    fun decreaseBullets() {
-        bulletsLeft--
-        if (bulletsLeft < 0) {
-            bulletsLeft = 0
+    fun increaseHealth(amount: Int): Boolean {
+        if (health >= Config.MAX_HEALTH) {
+            return false
         }
+        health += amount
+        if (health > Config.MAX_HEALTH) {
+            health = Config.MAX_HEALTH
+        }
+        return true
+    }
+
+    fun decreaseBullets() {
+        bulletsInMagazine--
+        if (bulletsInMagazine < 0) {
+            bulletsInMagazine = 0
+        }
+    }
+
+    fun increaseBullets(amount: Int): Boolean {
+        if (bulletsTotal >= bulletsMax) {
+            return false
+        }
+        bulletsTotal += amount
+        if (bulletsTotal > bulletsMax) {
+            bulletsTotal = bulletsMax
+        }
+        return true
     }
 
     fun respawn() {
         health = Config.MAX_HEALTH
-        bulletsLeft = Config.MAGAZINE_SIZE
+        bulletsInMagazine = Config.MAGAZINE_SIZE
+        bulletsTotal = bulletsMax
     }
 
-    fun reload() {
-        bulletsLeft = Config.MAGAZINE_SIZE
+    fun reload(): Boolean {
+        if (bulletsTotal <= 0 || bulletsInMagazine >= Config.MAGAZINE_SIZE) {
+            return false
+        }
+        val bulletsToReload = Math.min(Config.MAGAZINE_SIZE - bulletsInMagazine, bulletsTotal)
+        bulletsTotal -= bulletsToReload
+        bulletsInMagazine += bulletsToReload
+        return true
     }
 
     fun copyPlayerValuesFrom(player: Player) {

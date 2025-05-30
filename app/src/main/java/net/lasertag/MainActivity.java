@@ -254,7 +254,8 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
     }
 
     private void handleEvent(EventMessageIn message) {
-        var otherPlayer = getPlayerById(message.getPayload());
+        var payload = message.getPayload();
+        var otherPlayer = getPlayerById(payload);
         var otherName = otherPlayer != null ? otherPlayer.getName() : "someone";
         switch (message.getType()) {
             case Messaging.GAME_START -> lastLeader = -1;
@@ -266,7 +267,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
             case Messaging.YOU_SCORED -> showToasterMessage("You killed " + otherName, 2000);
             case Messaging.GAME_OVER -> {
                 if (teamPlay) {
-                    var teamName = message.getPayload() < 0 ? "No one" : teamNames[message.getPayload()];
+                    var teamName = payload < 0 ? "No one" : teamNames[payload];
                     showToasterMessage("Game Over!\n" + teamName + " wins.", 4000);
                 } else {
                     if (otherPlayer != null && otherPlayer.getId() == config.getPlayerId()) {
@@ -278,7 +279,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
             }
             case Messaging.DEVICE_CONNECTED, Messaging.DEVICE_DISCONNECTED -> {
                 var connected = (message.getType() == Messaging.DEVICE_CONNECTED);
-                var isGun = (message.getPayload() == BluetoothClient.DEVICE_GUN);
+                var isGun = (payload == BluetoothClient.DEVICE_GUN);
                 var deviceName = isGun ? "gun" : "vest";
                 (isGun ? deviceStatusGun : deviceStatusVest)
                         .setVisibility(connected ? View.GONE : View.VISIBLE);
@@ -314,7 +315,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         playerName.setBackgroundColor(ResourcesCompat.getColor(getResources(), config.getTeamColor(player.getTeamId(), true), null));
         playerHealth.setText(String.valueOf(player.getHealth()));
         playerScore.setText(String.valueOf(player.getScore()));
-        refreshBulletsBar(player.getBulletsLeft());
+        refreshBulletsBar(player.getBulletsInMagazine());
     }
 
     private void updatePlayersInfoAndAnnounceLeaderChange(Player[] newPlayers) {

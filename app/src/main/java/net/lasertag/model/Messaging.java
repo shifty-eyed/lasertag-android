@@ -7,6 +7,7 @@ import java.util.List;
 public class Messaging {
 
     public static final byte PING = 1;
+    public static final byte PLAYER_REPLY_PING = 41;
     public static final byte GUN_SHOT = 2;
     public static final byte GUN_RELOAD = 3;
     public static final byte YOU_HIT_SOMEONE = 4;
@@ -21,6 +22,12 @@ public class Messaging {
     public static final byte DEVICE_PLAYER_STATE = 13;
     public static final byte DEVICE_CONNECTED = 14;
     public static final byte DEVICE_DISCONNECTED = 15;
+
+    public static final byte GOT_HEALTH = 16;
+    public static final byte GOT_AMMO = 17;
+    public static final byte GOT_FLAG = 18;
+    public static final byte RESPAWN_POINT_WRONG = 19;
+
 
     public static final byte GAME_TIMER = 101;
     public static final byte SERVER_DISCONNECTED = 102;
@@ -47,10 +54,8 @@ public class Messaging {
 
     private static GameStartMessageIn parseGameStartEventFromServer(ByteBuffer buffer) {
         var teamPlay = buffer.get();
-        var respawnTime = buffer.get();
         var gameTimeMinutes = buffer.get();
-        var startDelaySeconds = buffer.get();
-        return new GameStartMessageIn(GAME_START, teamPlay != 0, respawnTime, gameTimeMinutes, startDelaySeconds);
+        return new GameStartMessageIn(GAME_START, teamPlay != 0, gameTimeMinutes);
     }
 
     public static EventMessageIn parseMessageFromDevice(List<Byte> bytes) {
@@ -69,12 +74,15 @@ public class Messaging {
             var score = buffer.get();
             var teamId = buffer.get();
             var damage = buffer.get();
+            var bulletsMax = buffer.get();
+            var assignedRespawnPoint = buffer.get();
+            var flagCarrier = buffer.get() != 0;
             var nameLength = buffer.get();
             var nameBytes = new byte[nameLength];
             if (nameLength > 0) {
                 buffer.get(nameBytes, 0, nameLength);
             }
-            players[i] = new Player(id, health, score, teamId, damage, 0, new String(nameBytes));
+            players[i] = new Player(id, health, score, teamId, damage, 0, 0, bulletsMax, assignedRespawnPoint, flagCarrier, new String(nameBytes));
         }
         return new StatsMessageIn(PLAYER_VALUES_SNAPSHOT, isGameRunning, teamPlay, gameTimerSeconds, players);
     }
