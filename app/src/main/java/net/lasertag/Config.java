@@ -10,7 +10,7 @@ import java.util.UUID;
 
 public class Config {
 
-    public static final int DEFAULT_PLAYER_ID = 1;
+    public static final int DEFAULT_PLAYER_ID = 2;
 
     public static final String TAG = "Lasertag";
     public static final String CHANNEL_ID = "LasertagForegroundServiceChannel";
@@ -43,8 +43,10 @@ public class Config {
     private final byte playerId;
     private InetAddress broadcastAddress;
     private InetAddress serverAddress = null;
+    private final Context context;
 
     public Config(Context context) {
+        this.context = context;
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         playerId = (byte)prefs.getInt(PLAYER_ID_KEY, DEFAULT_PLAYER_ID);
         try {
@@ -54,6 +56,12 @@ public class Config {
 
     public byte getPlayerId() {
         return playerId;
+    }
+    public void setPlayerId(int playerId) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        SharedPreferences.Editor editor = prefs.edit();
+        editor.putInt(PLAYER_ID_KEY, playerId);
+        editor.apply();
     }
 
     public InetAddress getServerAddress() {

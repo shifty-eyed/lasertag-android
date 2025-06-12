@@ -4,7 +4,7 @@ import net.lasertag.Config
 import java.io.Serializable
 
 data class Player(
-    val id: Int,
+    var id: Int,
     var health: Int,
     var score: Int,
     var teamId: Int,
@@ -59,6 +59,7 @@ data class Player(
     }
 
     fun respawn() {
+        assignedRespawnPoint = -1
         health = Config.MAX_HEALTH
         bulletsInMagazine = Config.MAGAZINE_SIZE
         bulletsTotal = bulletsMax
@@ -79,6 +80,9 @@ data class Player(
         score = player.score
         teamId = player.teamId
         damage = player.damage
+        bulletsMax = player.bulletsMax
+        assignedRespawnPoint = player.assignedRespawnPoint
+
         if (player.name.isNotEmpty()) {
             name = player.name
         }

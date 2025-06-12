@@ -59,8 +59,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
                     android.Manifest.permission.BLUETOOTH_SCAN
             };
 
-    private final BroadcastReceiver udpMessageReceiver = new BroadcastReceiver() {
-
+    private final BroadcastReceiver serviceMessageReceiver = new BroadcastReceiver() {
         @Override
         public synchronized void onReceive(Context context, Intent intent) {
             switch (Objects.requireNonNull(intent.getAction())) {
@@ -88,6 +87,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
     private TextView playerName;
     private TextView playerHealth;
     private TextView playerScore;
+    private TextView playerTotalAmmo;
     private ImageView deviceStatusGun;
     private ImageView deviceStatusVest;
     private TableLayout playersTable;
@@ -104,8 +104,11 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
     private volatile int currentState = -1;
     private volatile boolean teamPlay = false;
     private volatile Player[] players = new Player[0];
+    private final Player thisPlayer = new Player(DEFAULT_PLAYER_ID);
     private volatile boolean toasterOn = false;
     private int lastLeader = -1;
+
+    private AdminSettingsDialog adminSettingsDialog;
 
     @Override
     public void onConfigurationChanged(@NonNull Configuration newConfig) {
@@ -118,15 +121,17 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         Log.i(TAG, "onCreate");
         if (allPermissionsGranted()) {
             startService(new Intent(this, GameService.class));
-            registerReceiver(udpMessageReceiver, new IntentFilter(INTERCOM_GAME_MESSAGE), Context.RECEIVER_EXPORTED);
-            registerReceiver(udpMessageReceiver, new IntentFilter(INTERCOM_TIME_TICK), Context.RECEIVER_EXPORTED);
-            registerReceiver(udpMessageReceiver, new IntentFilter(INTERCOM_GAME_STATE), Context.RECEIVER_EXPORTED);
+            registerReceiver(serviceMessageReceiver, new IntentFilter(INTERCOM_GAME_MESSAGE), Context.RECEIVER_EXPORTED);
+            registerReceiver(serviceMessageReceiver, new IntentFilter(INTERCOM_TIME_TICK), Context.RECEIVER_EXPORTED);
+            registerReceiver(serviceMessageReceiver, new IntentFilter(INTERCOM_GAME_STATE), Context.RECEIVER_EXPORTED);
         } else {
             ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS,1);
         }
 
         config = new Config(this);
+        thisPlayer.setId(config.getPlayerId());
         textToSpeech = new TextToSpeech(this, this);
+        adminSettingsDialog = new AdminSettingsDialog(this);
 
         enableFullScreenMode();
         setContentView(R.layout.activity_main);
@@ -134,10 +139,12 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         playerName = findViewById(R.id.player_name);
         playerHealth = findViewById(R.id.player_health);
         playerScore = findViewById(R.id.player_score);
+        playerTotalAmmo = findViewById(R.id.player_total_ammo);
         playersTable = findViewById(R.id.players_table);
         playerInfoLayout = findViewById(R.id.player_info_layout);
         announcementLayout = findViewById(R.id.announcement_layout);
         announcementText = findViewById(R.id.announcement_text);
+        announcementText.setOnClickListener((View v) -> adminSettingsDialog.onAdminSettingsInvocationTap());
         gameTime = findViewById(R.id.game_timer);
         bulletsBar = findViewById(R.id.bullets_bar);
         teamScoresBar = findViewById(R.id.team_scores);
@@ -190,7 +197,10 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        goFullScreen();
+    }
 
+    public void goFullScreen() {
         View decorView = getWindow().getDecorView();
         decorView.setSystemUiVisibility(
                 View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
@@ -206,6 +216,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
     protected void onResume() {
         super.onResume();
         Log.i(TAG, "onResume");
+        goFullScreen();
         sendBroadcast(new Intent("ACTIVITY_RESUMED"));
     }
 
@@ -244,7 +255,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
             }
             case STATE_DEAD -> {
                 showAnnouncementLayout(true);
-                announcementText.setText("You are dead.");
+                announcementText.setText(String.format("Go to\nRespawn Point %d", thisPlayer.getAssignedRespawnPoint()));
             }
             case STATE_OFFLINE -> {
                 showAnnouncementLayout(true);
@@ -289,12 +300,8 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
     }
 
     private void handleTime(TimeMessage message) {
-        if (!toasterOn) {
-            switch (currentState) {
-                case STATE_IDLE -> announcementText.setText(String.format("Start in %d...", message.getSeconds()));
-                case STATE_GAME -> gameTime.setText(String.format("%02d:%02d", message.getMinutes(), message.getSeconds()));
-                case STATE_DEAD -> announcementText.setText(String.format("You are dead.\nRespawn in %d...", message.getSeconds()));
-            }
+        if (!toasterOn && currentState == STATE_GAME) {
+            gameTime.setText(String.format("%02d:%02d", message.getMinutes(), message.getSeconds()));
             if (message.getMinutes() == 0 && message.getSeconds() < 10 && message.getSeconds() > 0) {
                 speak(String.valueOf(message.getSeconds()));
             }
@@ -311,10 +318,12 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         }
     }
     private void updatePlayerInfo(Player player) {
+        thisPlayer.copyPlayerValuesFrom(player);
         playerName.setText(player.getName());
         playerName.setBackgroundColor(ResourcesCompat.getColor(getResources(), config.getTeamColor(player.getTeamId(), true), null));
         playerHealth.setText(String.valueOf(player.getHealth()));
         playerScore.setText(String.valueOf(player.getScore()));
+        playerTotalAmmo.setText(String.valueOf(player.getBulletsTotal()));
         refreshBulletsBar(player.getBulletsInMagazine());
     }
 
@@ -425,6 +434,14 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         return null;
     }
 
+    public Config getConfig() {
+        return config;
+    }
+
+    public Player getThisPlayer() {
+        return thisPlayer;
+    }
+
     @Override
     protected void onDestroy() {
         Log.i(TAG, "onDestroy called");
@@ -433,7 +450,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
             textToSpeech.shutdown();
         }
         super.onDestroy();
-        unregisterReceiver(udpMessageReceiver);
+        unregisterReceiver(serviceMessageReceiver);
     }
 
 }

@@ -45,7 +45,6 @@ public class GameService extends Service {
 
     private volatile boolean isActive = true;
     private volatile boolean isGameRunning = false;
-    private volatile boolean isGameStartPending = false;
     private volatile boolean teamPlay = false;
     private volatile int currentState = -1;
 
@@ -122,17 +121,21 @@ public class GameService extends Service {
 
     @Override
     public void onDestroy() {
-        super.onDestroy();
         unregisterReceiver(activityResumedReceiver);
         executorService.shutdownNow();
         soundManager.release();
         if (gunComm != null && vestComm != null) {
-            gunComm.stop();
-            vestComm.stop();
+            try {
+                gunComm.stop();
+                vestComm.stop();
+            } catch (Exception ignored) {}
         }
         if (udpClient != null) {
-            udpClient.stop();
+            try {
+                udpClient.stop();
+            } catch (Exception ignored) {}
         }
+        super.onDestroy();
         Log.i(TAG, "Service destroyed");
     }
 
@@ -142,7 +145,7 @@ public class GameService extends Service {
     }
 
     private void timerTick() {
-        if (!isGameStartPending && !isGameRunning) {
+        if (!isGameRunning) {
             return;
         }
         for (AtomicInteger gameTimer : timerCounters) {
@@ -160,7 +163,7 @@ public class GameService extends Service {
         var newState = -1;
         if (!udpClient.isOnline()) {
             newState = STATE_OFFLINE;
-        } else if (!isGameRunning || isGameStartPending) {
+        } else if (!isGameRunning) {
             newState = STATE_IDLE;
         } else {
             newState = !thisPlayer.isAlive() ? STATE_DEAD : STATE_GAME;
@@ -169,8 +172,10 @@ public class GameService extends Service {
             currentState = newState;
             sendCurrentStateToActivity();
             sendCurrentStateToDevice();
+            Log.i(TAG, "New State: " + currentState);
             return true;
         } else {
+            Log.i(TAG, "State not changed: " + currentState);
             return false;
         }
     }
@@ -224,7 +229,7 @@ public class GameService extends Service {
                 isGameRunning = false;
             }
             case Messaging.GAME_START -> {
-                isGameStartPending = true;
+                thisPlayer.setHealth(0);
                 soundManager.playGameStart();
                 var gameStartMessage = (GameStartMessageIn) message;
                 teamPlay = gameStartMessage.getTeamPlay();
@@ -322,7 +327,6 @@ public class GameService extends Service {
                 if (extraValue == thisPlayer.getAssignedRespawnPoint()) {
                     soundManager.playRespawn();
                     isGameRunning = true;
-                    isGameStartPending = false;
                     thisPlayer.respawn();
                     evaluateCurrentState();
                 } else {
