@@ -291,16 +291,17 @@ public class GameService extends Service {
             case Messaging.DEVICE_CONNECTED -> sendCurrentStateToDevice();
             // Messaging.DEVICE_DISCONNECTED has no action, just propagate to activity
             case Messaging.GUN_SHOT -> {
+                propagateToServer = false;
                 if (thisPlayer.getBulletsInMagazine() > 0) {
                     soundManager.playGunShot();
                     thisPlayer.decreaseBullets();
                 } else {
                     soundManager.playNoBullets();
                     type = Messaging.GUN_NO_BULLETS;
-                    propagateToServer = false;
                 }
             }
             case Messaging.GUN_RELOAD -> {
+                propagateToServer = false;
                 soundManager.playReload();
                 thisPlayer.reload();
             }

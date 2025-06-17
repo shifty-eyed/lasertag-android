@@ -251,6 +251,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
             case STATE_GAME -> showAnnouncementLayout(false);
             case STATE_IDLE -> {
                 showAnnouncementLayout(true);
+                gameTime.setText("--:--");
                 announcementText.setText("Game is not started.");
             }
             case STATE_DEAD -> {
@@ -258,6 +259,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
                 announcementText.setText(String.format("Go to\nRespawn Point %d", thisPlayer.getAssignedRespawnPoint()));
             }
             case STATE_OFFLINE -> {
+                gameTime.setText("--:--");
                 showAnnouncementLayout(true);
                 announcementText.setText("Offline");
             }
