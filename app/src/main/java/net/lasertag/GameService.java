@@ -239,6 +239,19 @@ public class GameService extends Service {
                 soundManager.playYouScored();
                 thisPlayer.setScore(thisPlayer.getScore() + 1);
             }
+            case Messaging.GIVE_HEALTH_TO_PLAYER -> {
+                var amount = ((EventMessageIn) message).getPayload();
+                thisPlayer.increaseHealth(amount);
+                //send update to server about health change
+                //todo: fix double counting
+                udpClient.sendEventToServer(new EventMessageToServer(Messaging.GIVE_HEALTH_TO_PLAYER, thisPlayer, 0));
+                soundManager.playGotHealth();
+            }
+            case Messaging.GIVE_AMMO_TO_PLAYER -> {
+                var amount = ((EventMessageIn) message).getPayload();
+                thisPlayer.increaseBullets(amount);
+                soundManager.playGotAmmo();
+            }
             case Messaging.PLAYER_VALUES_SNAPSHOT -> {
                 var statsMessage = (StatsMessageIn) message;
                 isGameRunning = statsMessage.isGameRunning();
@@ -308,17 +321,13 @@ public class GameService extends Service {
                 }
             }
             case Messaging.GOT_HEALTH -> {
-                if (thisPlayer.increaseHealth(extraValue)) {
-                    soundManager.playGotHealth();
-                } else {
+                if (thisPlayer.getHealth() >= Config.MAX_HEALTH) {
                     propagateToServer = false;
                     propagateToActivity = false;
                 }
             }
             case Messaging.GOT_AMMO -> {
-                if (thisPlayer.increaseBullets(extraValue)) {
-                    soundManager.playGotAmmo();
-                } else {
+                if (thisPlayer.getBulletsInMagazine() >= thisPlayer.getBulletsMax()) {
                     propagateToServer = false;
                     propagateToActivity = false;
                 }

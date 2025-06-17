@@ -288,6 +288,10 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
                     }
                 }
             }
+            case Messaging.GIVE_HEALTH_TO_PLAYER ->
+                showToasterMessage( String.format("+ %d health", payload), 1500);
+            case Messaging.GIVE_AMMO_TO_PLAYER ->
+                    showToasterMessage( String.format("+ %d bullets", payload), 1500);
             case Messaging.DEVICE_CONNECTED, Messaging.DEVICE_DISCONNECTED -> {
                 var connected = (message.getType() == Messaging.DEVICE_CONNECTED);
                 var isGun = (payload == BluetoothClient.DEVICE_GUN);
@@ -300,11 +304,9 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
     }
 
     private void handleTime(TimeMessage message) {
-        if (!toasterOn && currentState == STATE_GAME) {
-            gameTime.setText(String.format("%02d:%02d", message.getMinutes(), message.getSeconds()));
-            if (message.getMinutes() == 0 && message.getSeconds() < 10 && message.getSeconds() > 0) {
-                speak(String.valueOf(message.getSeconds()));
-            }
+        gameTime.setText(String.format("%02d:%02d", message.getMinutes(), message.getSeconds()));
+        if (message.getMinutes() == 0 && message.getSeconds() < 10 && message.getSeconds() > 0) {
+            speak(String.valueOf(message.getSeconds()));
         }
     }
 

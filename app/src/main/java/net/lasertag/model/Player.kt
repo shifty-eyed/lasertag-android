@@ -29,15 +29,11 @@ data class Player(
         }
     }
 
-    fun increaseHealth(amount: Int): Boolean {
-        if (health >= Config.MAX_HEALTH) {
-            return false
-        }
+    fun increaseHealth(amount: Int) {
         health += amount
         if (health > Config.MAX_HEALTH) {
             health = Config.MAX_HEALTH
         }
-        return true
     }
 
     fun decreaseBullets() {
@@ -47,20 +43,16 @@ data class Player(
         }
     }
 
-    fun increaseBullets(amount: Int): Boolean {
-        if (bulletsTotal >= bulletsMax) {
-            return false
-        }
+    fun increaseBullets(amount: Int) {
         bulletsTotal += amount
         if (bulletsTotal > bulletsMax) {
             bulletsTotal = bulletsMax
         }
-        return true
     }
 
     fun respawn() {
         assignedRespawnPoint = -1
-        health = Config.MAX_HEALTH
+        health = 50//Config.MAX_HEALTH
         bulletsInMagazine = Config.MAGAZINE_SIZE
         bulletsTotal = bulletsMax
     }

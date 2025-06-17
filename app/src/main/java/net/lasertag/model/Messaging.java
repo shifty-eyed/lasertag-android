@@ -28,6 +28,8 @@ public class Messaging {
     public static final byte GOT_FLAG = 18;
     public static final byte RESPAWN_POINT_WRONG = 19;
 
+    public static final byte GIVE_HEALTH_TO_PLAYER = 26;
+    public static final byte GIVE_AMMO_TO_PLAYER = 27;
 
     public static final byte GAME_TIMER = 101;
     public static final byte SERVER_DISCONNECTED = 102;
