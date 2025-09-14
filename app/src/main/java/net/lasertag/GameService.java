@@ -242,8 +242,6 @@ public class GameService extends Service {
             case Messaging.GIVE_HEALTH_TO_PLAYER -> {
                 var amount = ((EventMessageIn) message).getPayload();
                 thisPlayer.increaseHealth(amount);
-                //send update to server about health change
-                //todo: fix double counting
                 udpClient.sendEventToServer(new EventMessageToServer(Messaging.GIVE_HEALTH_TO_PLAYER, thisPlayer, 0));
                 soundManager.playGotHealth();
             }
@@ -322,15 +320,15 @@ public class GameService extends Service {
                 }
             }
             case Messaging.GOT_HEALTH -> {
+                propagateToActivity = false;
                 if (thisPlayer.getHealth() >= Config.MAX_HEALTH) {
                     propagateToServer = false;
-                    propagateToActivity = false;
                 }
             }
             case Messaging.GOT_AMMO -> {
-                if (thisPlayer.getBulletsInMagazine() >= thisPlayer.getBulletsMax()) {
+                propagateToActivity = false;
+                if (thisPlayer.getBulletsTotal() >= thisPlayer.getBulletsMax()) {
                     propagateToServer = false;
-                    propagateToActivity = false;
                 }
             }
             case Messaging.RESPAWN -> {
