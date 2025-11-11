@@ -290,7 +290,7 @@ public class GameService extends Service {
             // Messaging.DEVICE_DISCONNECTED has no action, just propagate to activity
             case Messaging.GUN_SHOT -> {
                 propagateToServer = false;
-                if (thisPlayer.getBulletsInMagazine() > 0) {
+                if (thisPlayer.getBulletsInMagazine() > 0 && thisPlayer.isAlive()) {
                     soundManager.playGunShot();
                     thisPlayer.decreaseBullets();
                 } else {
@@ -304,30 +304,35 @@ public class GameService extends Service {
                 thisPlayer.reload();
             }
             case Messaging.GOT_HIT -> {
-                //Assumed that other player has bullets > 0, not dead, game started
-                var otherPlayer = getPlayerById(extraValue);
-                if (otherPlayer.getTeamId() == thisPlayer.getTeamId()) {
-                    //maybe play Friendly fire
-                    return;
-                }
-                thisPlayer.decreaseHealth(otherPlayer.getDamage());
                 if (thisPlayer.isAlive()) {
-                    soundManager.playGotHit();
+                    //Assumed that other player has bullets > 0, not dead, game started
+                    var otherPlayer = getPlayerById(extraValue);
+                    if (otherPlayer == null || teamPlay && otherPlayer.getTeamId() == thisPlayer.getTeamId()) {
+                        //maybe play Friendly fire
+                        return;
+                    }
+                    thisPlayer.decreaseHealth(otherPlayer.getDamage());
+                    if (thisPlayer.isAlive()) {
+                        soundManager.playGotHit();
+                    } else {
+                        soundManager.playYouKilled();
+                        evaluateCurrentState();
+                        type = Messaging.YOU_KILLED;
+                    }
                 } else {
-                    soundManager.playYouKilled();
-                    evaluateCurrentState();
-                    type = Messaging.YOU_KILLED;
+                    propagateToServer = false;
+                    propagateToActivity = false;
                 }
             }
             case Messaging.GOT_HEALTH -> {
                 propagateToActivity = false;
-                if (thisPlayer.getHealth() >= Config.MAX_HEALTH) {
+                if (thisPlayer.getHealth() >= Config.MAX_HEALTH || !thisPlayer.isAlive()) {
                     propagateToServer = false;
                 }
             }
             case Messaging.GOT_AMMO -> {
                 propagateToActivity = false;
-                if (thisPlayer.getBulletsTotal() >= thisPlayer.getBulletsMax()) {
+                if (thisPlayer.getBulletsTotal() >= thisPlayer.getBulletsMax() || !thisPlayer.isAlive()) {
                     propagateToServer = false;
                 }
             }
@@ -352,10 +357,14 @@ public class GameService extends Service {
     }
 
     private Player getPlayerById(int id) {
-        return allPlayersSnapshot.stream()
+        var result = allPlayersSnapshot.stream()
                 .filter(p -> p.getId() == id)
                 .findFirst()
                 .orElse(null);
+        if (result == null) {
+            Log.w(TAG, "Wrong getPlayerById: " + id);
+        }
+        return result;
     }
 
     @Override
