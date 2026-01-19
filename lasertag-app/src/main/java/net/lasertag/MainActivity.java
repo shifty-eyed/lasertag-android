@@ -385,6 +385,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
             scoreText.setText(String.valueOf(player.getScore()));
             scoreText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
 
+            // consider removing health from table, player doesnt need to know other's health
             TextView healthText = new TextView(this);
             healthText.setText(String.valueOf(player.getHealth()));
             healthText.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
