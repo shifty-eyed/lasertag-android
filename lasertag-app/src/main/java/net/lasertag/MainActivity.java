@@ -150,6 +150,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         teamScoresBar = findViewById(R.id.team_scores);
 
         deviceStatusGun = findViewById(R.id.device_status_gun);
+        deviceStatusGun.setVisibility(View.GONE);
         deviceStatusVest = findViewById(R.id.device_status_vest);
 
         currentState = STATE_OFFLINE;
@@ -296,10 +297,12 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
                     showToasterMessage( String.format("+ %d bullets", payload), 1500);
             case Messaging.DEVICE_CONNECTED, Messaging.DEVICE_DISCONNECTED -> {
                 var connected = (message.getType() == Messaging.DEVICE_CONNECTED);
-                var isGun = (payload == BluetoothClient.DEVICE_GUN);
-                var deviceName = isGun ? "gun" : "vest";
-                (isGun ? deviceStatusGun : deviceStatusVest)
-                        .setVisibility(connected ? View.GONE : View.VISIBLE);
+                //var isGun = (payload == BluetoothClient.DEVICE_GUN);
+                //var deviceName = isGun ? "gun" : "vest";
+                var deviceName = "vest";
+                //(isGun ? deviceStatusGun : deviceStatusVest)
+                deviceStatusVest
+                       .setVisibility(connected ? View.GONE : View.VISIBLE);
                 speak(deviceName + (connected ? " connected." : " disconnected."));
             }
         }

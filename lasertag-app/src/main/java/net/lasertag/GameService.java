@@ -14,9 +14,11 @@ import android.os.IBinder;
 import android.util.Log;
 
 import net.lasertag.communication.BluetoothClient;
+import net.lasertag.communication.MockDeviceClient;
 import net.lasertag.communication.UdpClient;
 import net.lasertag.model.EventMessageIn;
 import net.lasertag.model.GameStartMessageIn;
+import net.lasertag.model.MockEventMessageFromDevice;
 import net.lasertag.model.WirelessMessage;
 
 import static net.lasertag.Config.*;
@@ -28,6 +30,7 @@ import net.lasertag.model.StatsMessageIn;
 import net.lasertag.model.TimeMessage;
 import net.lasertag.model.Messaging;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -48,7 +51,7 @@ public class GameService extends Service {
     private volatile boolean teamPlay = false;
     private volatile int currentState = -1;
 
-    private final AtomicInteger[] timerCounters = new AtomicInteger[] { new AtomicInteger(0), new AtomicInteger(0) };
+    private final AtomicInteger[] timerCounters = new AtomicInteger[]{new AtomicInteger(0), new AtomicInteger(0)};
     private static final int TIMER_GAME = 0;
 
     private Player thisPlayer;
@@ -57,7 +60,7 @@ public class GameService extends Service {
     private StatsMessageIn lastStatsMessage;
     private EventMessageIn lastReceivedEvent;
 
-    private BluetoothClient gunComm;
+    private MockDeviceClient debugComm;
     private BluetoothClient vestComm;
     private UdpClient udpClient;
 
@@ -99,9 +102,9 @@ public class GameService extends Service {
         try {
             var bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
 
-            gunComm = new BluetoothClient(Config.GUN_DEVICE_NAME, BluetoothClient.DEVICE_GUN, bluetoothAdapter, this::handleEventFromDevice);
             vestComm = new BluetoothClient(Config.VEST_DEVICE_NAME, BluetoothClient.DEVICE_VEST, bluetoothAdapter, this::handleEventFromDevice);
             udpClient = new UdpClient(config, this::handleEventFromServer);
+            debugComm = new MockDeviceClient(BluetoothClient.DEVICE_DEBUG, this::handleEventFromDevice);
 
             executorService.scheduleWithFixedDelay(this::timerTick, 0, 1, java.util.concurrent.TimeUnit.SECONDS);
             evaluateCurrentState();
@@ -124,16 +127,18 @@ public class GameService extends Service {
         unregisterReceiver(activityResumedReceiver);
         executorService.shutdownNow();
         soundManager.release();
-        if (gunComm != null && vestComm != null) {
+        if (debugComm != null && vestComm != null) {
             try {
-                gunComm.stop();
+                debugComm.stop();
                 vestComm.stop();
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
         if (udpClient != null) {
             try {
                 udpClient.stop();
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
         super.onDestroy();
         Log.i(TAG, "Service destroyed");
@@ -156,7 +161,7 @@ public class GameService extends Service {
         var minutes = (byte) (timerCounters[TIMER_GAME].get() / 60);
         var seconds = (byte) (timerCounters[TIMER_GAME].get() % 60);
         sendMessageToActivity(new TimeMessage(Messaging.GAME_TIMER, minutes, seconds), INTERCOM_TIME_TICK);
-}
+    }
 
     // return true if state changed
     private boolean evaluateCurrentState() {
@@ -191,10 +196,9 @@ public class GameService extends Service {
         var message = new MessageToDevice(
                 Messaging.DEVICE_PLAYER_STATE,
                 config.getPlayerId(),
-                (byte)thisPlayer.getTeamId(),
-                (byte)currentState,
-                (byte)thisPlayer.getBulletsInMagazine());
-        gunComm.sendMessageToDevice(message);
+                (byte) thisPlayer.getTeamId(),
+                (byte) currentState,
+                (byte) thisPlayer.getBulletsInMagazine());
         vestComm.sendMessageToDevice(message);
     }
 
@@ -223,6 +227,14 @@ public class GameService extends Service {
 
     private void handleEventFromServer(WirelessMessage message) {
         switch (message.getType()) {
+            case Messaging.MOCK_EVENT_FROM_DEVICE -> {
+                var mockEvent = (MockEventMessageFromDevice) message;
+                try {
+                    debugComm.sendMessageBytes(mockEvent.getMockContent());
+                } catch (IOException e) {
+                    Log.e(TAG, "Error writing to mock device pipe", e);
+                }
+            }
             case Messaging.YOU_HIT_SOMEONE -> soundManager.playYouHitSomeone();
             case Messaging.GAME_OVER -> {
                 soundManager.playGameOver();
@@ -282,7 +294,7 @@ public class GameService extends Service {
 
     public void handleEventFromDevice(WirelessMessage message) {
         var type = message.getType();
-        var extraValue = ((EventMessageIn)message).getPayload();
+        var extraValue = ((EventMessageIn) message).getPayload();
         var propagateToServer = true;
         var propagateToActivity = true;
         switch (message.getType()) {

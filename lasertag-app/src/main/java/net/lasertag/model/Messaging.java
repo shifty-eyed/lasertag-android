@@ -2,6 +2,7 @@ package net.lasertag.model;
 
 
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.List;
 
 public class Messaging {
@@ -33,6 +34,8 @@ public class Messaging {
 
     public static final byte GAME_TIMER = 101;
     public static final byte SERVER_DISCONNECTED = 102;
+    public static final byte MOCK_EVENT_FROM_DEVICE = 103;
+
 
     public static WirelessMessage fromBytes(byte[] bytes, int length) {
         ByteBuffer buffer = ByteBuffer.wrap(bytes, 0, length);
@@ -44,6 +47,10 @@ public class Messaging {
             return parseFullStatsMessage(buffer);
         } else if (type == GAME_START) {
             return parseGameStartEventFromServer(buffer);
+        } else if (type == MOCK_EVENT_FROM_DEVICE) {
+            var payload = new byte[length - 1];
+            buffer.get(payload);
+            return new MockEventMessageFromDevice(MOCK_EVENT_FROM_DEVICE, payload);
         } else {
             return parseEventFromServer(type, buffer);
         }

@@ -35,6 +35,11 @@ data class EventMessageIn (
     val payload: Byte
 ): WirelessMessage(type)
 
+data class MockEventMessageFromDevice (
+    override val type: Byte,
+    val mockContent: ByteArray,
+): WirelessMessage(type)
+
 data class GameStartMessageIn (
     override val type: Byte,
     val teamPlay: Boolean,
