@@ -302,7 +302,7 @@ public class GameService extends Service {
             // Messaging.DEVICE_DISCONNECTED has no action, just propagate to activity
             case Messaging.GUN_SHOT -> {
                 propagateToServer = false;
-                if (thisPlayer.getBulletsInMagazine() > 0 && thisPlayer.isAlive()) {
+                if (thisPlayer.getBulletsInMagazine() > 0 && thisPlayer.isAlive() && isGameRunning) {
                     soundManager.playGunShot();
                     thisPlayer.decreaseBullets();
                 } else {
